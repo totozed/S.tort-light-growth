@@ -21,11 +21,12 @@ setwd("C:/Users/Tobyz/Desktop/S.tort-light-growth/Data")
 
 files <- list.files(pattern = "WL2_size_survey.*\\.csv$")
 
-safe_read_process <- safely(function(f) {
+safe <- safely(function(f) {
   df <- read_csv(f, col_names = TRUE, show_col_types = FALSE) %>%
     clean_names() %>%
     mutate(
       date = mdy(date),
+      
       bed_row = as.numeric(bed_row),
       bed_col = as.character(bed_col),
       height_cm = as.numeric(height_cm),
