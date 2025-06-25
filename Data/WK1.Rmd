@@ -14,32 +14,37 @@ library(readxl)
 library(lubridate)
 library(janitor)
 library(purrr)
+library(readr)
 setwd("C:/Users/Tobyz/Desktop/S.tort-light-growth/Data")
 ```
-
+*import plant data*
 ```{r}
-
+#import
 files <- list.files(pattern = "WL2_size_survey.*\\.csv$")
 
-safe <- safely(function(f) {
-  df <- read_csv(f, col_names = TRUE, show_col_types = FALSE) %>%
-    clean_names() %>%
-    mutate(
-      date = mdy(date),
-      
-      bed_row = as.numeric(bed_row),
-      bed_col = as.character(bed_col),
-      height_cm = as.numeric(height_cm),
-      long_leaf_cm = if ("long_leaf_cm" %in% names(.)) as.numeric(as.character(long_leaf_cm)) else NA,
-      plant_id = paste(block, bed, bed_row, bed_col, sep = "_"),
-      source_file = f
-    )
+safe_read_process <- safely(function(f) {
+  df <- read_csv(f, col_types = cols(.default = "c")) %>%
+    clean_names()
+  df$source_file <- f
   return(df)
 })
 
 results <- map(files, safe_read_process)
 successful_results <- keep(results, ~ !is.null(.x$result))
 successful_data <- bind_rows(map(successful_results, "result"), .id = "source_index")
+
+#clean data
+plant <- successful_data %>%
+  select(-starts_with("x"))%>%
+  mutate(
+    height_cm = parse_number(height_cm),
+    long_leaf_cm = parse_number(long_leaf_cm),
+    date=mdy(date)
+  )
+```
+
+```{r}
+summary(plant)
 ```
 
 *consolidate light measurement to a weekly measurement*
@@ -63,6 +68,25 @@ weekly_light <- light_raw %>%
 # result
 print(weekly_light)
 ```
+
+*compute growth from size measurements*
+```{r}
+plant_growth <- plant %>%
+  filter(date %in% as.Date(c("2023-08-02", "2023-10-23"))) %>%
+  group_by(block, bed, bed_row, bed_col) %>%
+  arrange(date) %>%
+  summarise(
+    height_growth = diff(height_cm),
+    leaf_growth = diff(long_leaf_cm),
+    .groups = "drop"
+  )
+```
+
+
+
+
+
+
 
 
 
