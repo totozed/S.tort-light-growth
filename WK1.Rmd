@@ -15,13 +15,11 @@ library(lubridate)
 library(janitor)
 library(purrr)
 library(readr)
-setwd("C:/Users/Tobyz/Desktop/S.tort-light-growth/Data")
 ```
 *import plant data*
 ```{r}
 #import
-files <- list.files(pattern = "WL2_size_survey.*\\.csv$")
-
+files <- list.files(path = "Data/", pattern = "WL2_size_survey_.*_corrected\\.csv", full.names = TRUE)
 safe_read_process <- safely(function(f) {
   df <- read_csv(f, col_types = cols(.default = "c")) %>%
     clean_names()
@@ -50,7 +48,7 @@ summary(plant)
 *consolidate light measurement to a weekly measurement*
 ```{r}
 #import light data
-light_raw <- read_csv("CR1000XSeries_IntBioHalfHourTable.txt", skip = 1, show_col_types = FALSE)
+light_raw <- read_csv("Data/IntBioHalfHourTable_clean.txt")
 
 #weekly measurement
 weekly_light <- light_raw %>%

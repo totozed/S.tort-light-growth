@@ -89,13 +89,12 @@ plant_growth <- plant %>%
 
 Plot a growth curve
 ```{r}
-'''
 plat_growth = plant |>
 unite("PID", pop:rep, sep = "_") |> # create a unique plant ID
 mutate(date_axis = format(date, "%b %e"),
 date_axis = factor(date_axis, levels = unique(date_axis))) |>
 select(PID, date_axis, height_cm)
-'''
+
 # Will write this data once in a csv and read it in next time
 # write_csv(plat_growth, "Data/plant_growth.csv")
 plant_growth = read_csv("Data/plant_growth.csv")
