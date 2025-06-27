@@ -46,6 +46,8 @@ plant <- successful_data %>%
     long_leaf_cm = parse_number(long_leaf_cm),
     date=mdy(date)
   )
+
+
 ```
 
 ```{r}
@@ -85,26 +87,61 @@ plant_growth <- plant %>%
     leaf_growth = diff(long_leaf_cm),
     .groups = "drop"
   )
+plant_growth
 ```
 
 Plot a growth curve
 ```{r}
-plat_growth = plant |>
-unite("PID", pop:rep, sep = "_") |> # create a unique plant ID
-mutate(date_axis = format(date, "%b %e"),
-date_axis = factor(date_axis, levels = unique(date_axis))) |>
-select(PID, date_axis, height_cm)
+plant_growth <- plant |>
+  unite("PID", pop:rep, sep = "_") |>
+  mutate(
+    date_axis = format(date, "%b %d"),
+    date_axis = factor(date_axis, levels = format(sort(unique(date)), "%b %d"))
+  ) |>
+  select(PID, date_axis, height_cm)
 
 # Will write this data once in a csv and read it in next time
-# write_csv(plat_growth, "Data/plant_growth.csv")
+write_csv(plat_growth, "Data/plant_growth.csv")
 plant_growth = read_csv("Data/plant_growth.csv")
 
 
 ggplot(plat_growth, aes(x = date_axis, y = height_cm, group = PID)) +
   geom_line() +
+  geom_point(alpha = 0.1)+
   labs(title = "Growth Curve of Plants", x = "Date", y = "Height (cm)") +
   theme_bw() +
   theme(legend.position = "bottom")
+
+plant %>%
+  filter(date %in% as.Date(c("2023-09-27", "2023-10-13"))) %>%
+  group_by(date) %>%
+  summarise(
+    total = n(),
+    missing = sum(is.na(height_cm)),
+    present = sum(!is.na(height_cm))
+  )
+
+plant_growth %>%
+  filter(date_axis %in% c("Sep 27", "Oct 13")) %>%
+  group_by(PID, date_axis) %>%
+  summarise(has_data = any(!is.na(height_cm)), .groups = "drop") %>%
+  pivot_wider(names_from = date_axis, values_from = has_data) %>%
+  filter(`Sep 27` & `Oct 13`)
+
+raw_check <- plant %>%
+  unite("PID", pop:rep, sep = "_")%>%
+  filter(date %in% as.Date(c("2023-09-27", "2023-10-13"))) %>%
+  filter(!is.na(height_cm)) %>%    
+  group_by(PID, date) %>%
+  summarise(n_obs = n(), .groups="drop") %>%
+  pivot_wider(
+    id_cols = PID,
+    names_from = date,
+    values_from = n_obs,
+    values_fill = 0
+  )
+
+raw_check
 ```
 
 There is a strange gap in October 13 and September 27. Need to investigate.
