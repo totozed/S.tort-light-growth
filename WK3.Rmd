@@ -170,6 +170,7 @@ plant_growth_rel%>%
   labs(title="Relative Growth Curve of Plants without Negative Growth < -5", x = "Date", y = "Relative Growth (%)")+
   theme_bw()
 ```
+
 *Measure Growth via Daily Growth Rate*
 ```{r}
 #define daily growth rate
