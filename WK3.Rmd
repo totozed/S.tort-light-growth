@@ -1,0 +1,231 @@
+---
+title: "WK3"
+output: html_document
+date: "2025-07-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(janitor)
+library(purrr)
+library(readr)
+library(ggthemes)
+#setwd("C:/Users/Tobyz/Desktop/S.tort-light-growth/Data")
+```
+
+*import plant data*
+```{r}
+plant <- read.csv("Data/WL2-2023_Size_Combined.csv") %>%
+  clean_names() %>%
+  mutate(survey_date = as.Date(survey_date, format = "%m/%d/%Y"))
+summary(plant)
+```
+
+*consolidate light measurement to a weekly measurement*
+```{r}
+#import light data
+light_raw <- read_csv("Data/IntBioHalfHourTable_clean.txt")
+
+#weekly measurement
+weekly_light <- light_raw %>%
+  mutate(
+    timestamp = ymd_hms(TIMESTAMP),
+    SlrW_Avg = as.numeric(SlrW_Avg),  # turn into number format
+    week = floor_date(timestamp, "week")
+  ) %>%
+  group_by(week) %>%
+  summarise(
+    weekly_avg_SlrW = mean(SlrW_Avg, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# result
+print(weekly_light)
+```
+
+*compute growth from size measurements*
+```{r}
+plant_growth <- plant %>%
+  unite("PID", genotype:rep, sep = "_") %>%
+  mutate(survey_date = as.Date(survey_date)) %>%
+  select(PID, survey_date, height_cm)
+
+# Will write this data once in a csv and read it in next time
+#write_csv(plant_growth, "Data/plant_growth.csv")
+#plant_growth = read_csv("Data/plant_growth.csv")
+
+#plot growth curve
+ggplot(plant_growth, aes(x = survey_date, y = height_cm, group = PID)) +
+  geom_line() +
+  geom_point(alpha = 0.1) +
+  labs(title = "Growth Curve of Plants", x = "Date", y = "Height (cm)") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+#check data on these two dates
+plant_growth %>%
+  filter(survey_date %in% as.Date(c("2023-09-27", "2023-10-13"))) %>%
+  group_by(PID, survey_date) %>%
+  summarise(has_data = any(!is.na(height_cm)), .groups = "drop") %>%
+  pivot_wider(names_from = survey_date, values_from = has_data)
+
+plant_growth %>%
+  filter(survey_date %in% as.Date(c("2023-09-27", "2023-10-13"))) %>%
+  group_by(PID, survey_date) %>%
+  summarise(has_data = any(!is.na(height_cm)), .groups = "drop") %>%
+  pivot_wider(names_from = survey_date, values_from = has_data) %>%
+  mutate(
+    status = case_when(
+      `2023-09-27` == TRUE & `2023-10-13` == TRUE ~ "both",
+      `2023-09-27` == TRUE & (`2023-10-13` == FALSE | is.na(`2023-10-13`)) ~ "only 9/27",
+      (`2023-09-27` == FALSE | is.na(`2023-09-27`)) & `2023-10-13` == TRUE ~ "only 10/13",
+      TRUE ~ "neither"
+    )
+  ) %>%
+  count(status)
+```
+
+*Investigate or filter out plants that show negative growth*
+```{r}
+#find out plants with negative growth
+plant_growth %>%
+  arrange(PID, survey_date) %>%  # arrange in time sequence
+  group_by(PID) %>%
+  mutate(growth = height_cm - lag(height_cm)) %>%  # find out the diff btw nearby dates
+  summarise(has_negative_growth = any(growth < 0, na.rm = TRUE)) %>% 
+  filter(has_negative_growth) -> neg_growth_plants
+neg_growth_plants
+
+#find out tolerance value
+neg_growth_values <- plant_growth %>%
+  arrange(PID, survey_date) %>%
+  group_by(PID) %>%
+  mutate(growth = height_cm - lag(height_cm)) %>%
+  ungroup() %>%
+  filter(growth < 0)
+
+ggplot(neg_growth_values, aes(x = growth)) +
+  geom_histogram(binwidth = 0.5, fill = "red", color = "black") +
+  labs(
+    title = "Distribution of Negative Growth Values",
+    x = "Height Decrease (cm)",
+    y = "Count"
+  ) +
+  theme_minimal()
+
+#filter out plants with negative growth < -5
+plant_growth_cleaned <- plant_growth
+
+repeat {
+  plant_growth_cleaned <- plant_growth_cleaned %>%
+    arrange(PID, survey_date) %>%
+    group_by(PID) %>%
+    mutate(growth = height_cm - lag(height_cm)) %>%
+    filter(is.na(growth) | growth >= -5) %>%
+    select(-growth) %>%
+    ungroup()
+
+  check <- plant_growth_cleaned %>%
+    arrange(PID, survey_date) %>%
+    group_by(PID) %>%
+    mutate(growth = height_cm - lag(height_cm)) %>%
+    filter(growth < -5)
+  
+  if (nrow(check) == 0) break
+}
+
+#plot growth curve
+ggplot(plant_growth_cleaned, aes(x = survey_date, y = height_cm, group = PID)) +
+  geom_line() +
+  geom_point(alpha = 0.1) +
+  labs(title = "Growth Curve of Plants without Negative Growth < -5", x = "Date", y = "Height (cm)") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+*measure growth via relative growth*
+```{r}
+plant_growth_rel <- plant_growth_cleaned %>%
+  arrange(PID, survey_date) %>%
+  group_by(PID) %>%
+  mutate(
+    prev_height = lag(height_cm),
+    growth = height_cm - prev_height,
+    relative_growth = growth / prev_height
+  ) %>%
+  ungroup()
+plant_growth_rel
+
+plant_growth_rel%>%
+  filter(!is.na(relative_growth)) %>%
+  ggplot(aes(survey_date, relative_growth, group= PID))+
+  geom_line()+
+  geom_point(alpha=0.1)+
+  labs(title="Relative Growth Curve of Plants without Negative Growth < -5", x = "Date", y = "Relative Growth (%)")+
+  theme_bw()
+```
+*Measure Growth via Daily Growth Rate*
+```{r}
+#define daily growth rate
+plant_growth_daily <- plant_growth_cleaned %>%
+  arrange(PID, survey_date) %>%
+  group_by(PID) %>%
+  mutate(
+    prev_height = lag(height_cm),
+    prev_date = lag(survey_date),
+    days_elapsed = as.numeric(survey_date - prev_date),
+    daily_growth = (height_cm - prev_height) / days_elapsed
+  ) %>%
+  ungroup()
+
+#Line graph
+plant_growth_daily %>%
+  filter(!is.na(daily_growth)) %>%
+  ggplot(aes(x = survey_date, y = daily_growth, group = PID)) +
+  geom_line(alpha = 0.3) +
+  labs(title = "Daily Growth Rate of Plants without Negative Growth < -5", y = "Daily Growth Rate (cm/day)", x = "Date") +
+  theme_bw()
+
+#boxplot
+plant_growth_daily %>%
+  filter(!is.na(daily_growth), days_elapsed > 0) %>%
+  mutate(date_factor = factor(survey_date, levels = sort(unique(survey_date))))%>%
+  ggplot(aes(x = date_factor, y = daily_growth)) +
+  geom_boxplot(outlier.alpha = 0.2) +
+  labs(title = "Distribution of Daily Growth Rates without Negative Growth < -5", x = "Date", y = "Daily Growth Rate (cm/day)") +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+#Align plant growth data to week
+plant_weekly <- plant_growth_daily %>%
+  filter(!is.na(daily_growth), days_elapsed > 0) %>%
+  mutate(week = floor_date(survey_date, "week"))
+
+#Adds `weekly_avg_SlrW` to plant data
+plant_with_light <- plant_weekly %>%
+  left_join(weekly_light, by = "week")  
+
+#Calculate correlation
+cor_result <- cor(
+  plant_with_light$daily_growth,
+  plant_with_light$weekly_avg_SlrW,
+use = "complete.obs"
+)
+
+print(cor_result)
+
+ggplot(plant_with_light, aes(x = weekly_avg_SlrW, y = daily_growth)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method = "lm", color = "red") +
+  labs(title = "Correlation between Light and Growth", x = "Weekly Avg Light (SlrW)", y = "Daily Growth (cm/day)") +
+  theme_bw()
+```
+
