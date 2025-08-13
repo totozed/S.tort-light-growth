@@ -1,6 +1,8 @@
 ---
 title: "WK3"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 date: "2025-07-02"
 ---
 
@@ -204,6 +206,7 @@ plant_growth_daily %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+*Correlate Growth with Solar Radiation*
 ```{r}
 #Align plant growth data to week
 plant_weekly <- plant_growth_daily %>%

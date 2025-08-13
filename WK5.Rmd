@@ -1,0 +1,250 @@
+---
+title: "WK5"
+output: html_document
+date: "2025-07-31"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(janitor)
+library(purrr)
+library(readr)
+library(ggthemes)
+library(ggeffects)
+library(lme4)
+#setwd("C:/Users/Tobyz/Desktop/S.tort-light-growth/Data")
+```
+
+*import plant data*
+
+```{r}
+plant <- read.csv("Data/WL2-2023_Size_Combined.csv") %>%
+  clean_names() %>%
+  mutate(survey_date = as.Date(survey_date, format = "%m/%d/%Y"))
+summary(plant)
+```
+
+*consolidate light measurement to a weekly measurement*
+
+```{r}
+#import light data
+light_raw <- read_csv("Data/IntBioHalfHourTable_clean.txt")
+
+#weekly measurement
+weekly_light <- light_raw %>%
+  mutate(
+    timestamp = ymd_hms(TIMESTAMP),
+    SlrW_Avg = as.numeric(SlrW_Avg),  # turn into number format
+    week = floor_date(timestamp, "week")
+  ) %>%
+  group_by(week) %>%
+  summarise(
+    weekly_avg_SlrW = mean(SlrW_Avg, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# result
+print(weekly_light)
+```
+
+*Investigate or filter out plants that show negative growth*
+
+```{r}
+#PID
+plant_growth <- plant %>%
+  unite("PID", genotype:rep, sep = "_", remove = FALSE) %>%
+  mutate(survey_date = as.Date(survey_date))
+
+#find out plants with negative growth
+plant_growth %>%
+  arrange(PID, survey_date) %>%  # arrange in time sequence
+  group_by(PID) %>%
+  mutate(growth = height_cm - lag(height_cm)) %>%  # find out the diff btw nearby dates
+  summarise(has_negative_growth = any(growth < 0, na.rm = TRUE)) %>% 
+  filter(has_negative_growth) -> neg_growth_plants
+neg_growth_plants
+
+#find out tolerance value
+neg_growth_values <- plant_growth %>%
+  arrange(PID, survey_date) %>%
+  group_by(PID) %>%
+  mutate(growth = height_cm - lag(height_cm)) %>%
+  ungroup() %>%
+  filter(growth < 0)
+
+ggplot(neg_growth_values, aes(x = growth)) +
+  geom_histogram(binwidth = 0.5, fill = "red", color = "black") +
+  labs(
+    title = "Distribution of Negative Growth Values",
+    x = "Height Decrease (cm)",
+    y = "Count"
+  ) +
+  theme_minimal()
+
+#filter out plants with negative growth < -5
+plant_growth_cleaned <- plant_growth
+
+repeat {
+  plant_growth_cleaned <- plant_growth_cleaned %>%
+    arrange(PID, survey_date) %>%
+    group_by(PID) %>%
+    mutate(growth = height_cm - lag(height_cm)) %>%
+    filter(is.na(growth) | growth >= -5) %>%
+    select(-growth) %>%
+    ungroup()
+
+  check <- plant_growth_cleaned %>%
+    arrange(PID, survey_date) %>%
+    group_by(PID) %>%
+    mutate(growth = height_cm - lag(height_cm)) %>%
+    filter(growth < -5)
+  
+  if (nrow(check) == 0) break
+}
+```
+
+*Measure Growth via Daily Growth Rate*
+
+```{r}
+#define daily growth rate
+plant_growth_daily <- plant_growth_cleaned %>%
+  arrange(PID, survey_date) %>%
+  group_by(PID) %>%
+  mutate(
+    prev_height = lag(height_cm),
+    prev_date = lag(survey_date),
+    days_elapsed = as.numeric(survey_date - prev_date),
+    daily_growth = (height_cm - prev_height) / days_elapsed
+  ) %>%
+  ungroup()
+```
+
+*Correlate Growth with Solar Radiation*
+
+```{r}
+#Align plant growth data to week
+plant_weekly <- plant_growth_daily %>%
+  filter(!is.na(daily_growth), days_elapsed > 0) %>%
+  mutate(week = floor_date(survey_date, "week"))
+
+#Adds `weekly_avg_SlrW` to plant data
+plant_with_light <- plant_weekly %>%
+  left_join(weekly_light, by = "week")  
+
+#Calculate correlation
+cor_result <- cor(
+  plant_with_light$daily_growth,
+  plant_with_light$weekly_avg_SlrW,
+use = "complete.obs"
+)
+
+print(cor_result)
+
+#Plot correlation
+ggplot(plant_with_light, aes(x = weekly_avg_SlrW, y = daily_growth)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method = "lm", color = "red") +
+  labs(title = "Correlation between Light and Growth", x = "Weekly Avg Light (SlrW)", y = "Daily Growth (cm/day)") +
+  theme_bw()
+```
+
+*Relationship btw Light and Growth by filtering out the effect of block via Mixed-effect Model*
+
+```{r}
+#Standardization
+plant_with_light$weekly_avg_SlrW2 <- scale(plant_with_light$weekly_avg_SlrW, center = TRUE, scale = TRUE)
+
+#Model
+growth_block.lmer <- lmer(
+  daily_growth ~ weekly_avg_SlrW2 + (1 | block),
+  data = plant_with_light
+)
+summary(growth_block.lmer)
+
+#Faceting
+(mmblock <- ggplot(plant_with_light, aes(x = weekly_avg_SlrW2, y = daily_growth)) +
+  facet_wrap(~block, nrow = 2) + 
+  geom_point(alpha = 0.3) +
+  geom_line(
+    data = cbind(plant_with_light, pred = predict(growth_block.lmer,na.action = na.exclude)),
+    aes(y = pred),
+    size = 1
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    panel.spacing = unit(2, "lines"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  labs(title = "Effect of Light on Daily Growth Rate in each Block",
+       x = "Weekly Avg Light (SlrW)",
+       y = "Daily Growth Rate (cm/day)")
+  )
+
+# Extract the prediction data frame
+pred.block <- ggpredict(growth_block.lmer, terms = c("weekly_avg_SlrW2"))  # this gives overall predictions for the model
+
+# Plot the predictions 
+(ggplot(pred.block) + 
+   geom_line(aes(x = x, y = predicted)) +          # slope
+   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
+               fill = "lightgrey", alpha = 0.5) +  # error band
+   geom_point(data = plant_with_light,                      # adding the raw data (scaled values)
+              aes(x = weekly_avg_SlrW2, y = daily_growth, colour = block)) + 
+   labs(x = "Weekly Avg Light (SlrW)", y = "Daily Growth Rate (cm/day)", 
+        title = "Effect of Light on Daily Growth Rate with Block") + 
+   theme_minimal()
+)
+```
+
+*Relationship btw Light and Growth by filtering out the effect of population via Mixed-effect Model*
+
+```{r}
+#Model
+growth_pop.lmer <- lmer(
+  daily_growth ~ weekly_avg_SlrW2 + (1|parent_pop),
+  data = plant_with_light
+)
+summary(growth_pop.lmer)
+
+#Smooth
+(mmblock <- ggplot(plant_with_light, aes(x = weekly_avg_SlrW2, y = daily_growth, colour = parent_pop)) +
+  #facet_wrap(~parent_pop) + 
+  geom_point(alpha = 0.3) +
+  #geom_line(
+  #  data = cbind(plant_with_light, pred = predict(growth_pop.lmer,na.action = na.exclude)),
+  #  aes(y = pred),
+  #  size = 1
+  #) +
+  geom_smooth(method="lm",se=FALSE)+
+  theme_bw() +
+  theme(
+    legend.position = "right",
+    panel.spacing = unit(2, "lines"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  labs(title = "Effect of Light on Daily Growth Rate in each Popolation",
+       x = "Weekly Avg Light (SlrW)",
+       y = "Daily Growth Rate (cm/day)")
+  )
+
+#Prediction
+pred.pop <- ggpredict(growth_pop.lmer, terms = c("weekly_avg_SlrW2"))  
+
+(ggplot(pred.pop) + 
+   geom_line(aes(x = x, y = predicted)) +          # slope
+   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
+               fill = "lightgrey", alpha = 0.5) +  # error band
+   geom_point(data = plant_with_light,                      # adding the raw data (scaled values)
+              aes(x = weekly_avg_SlrW2, y = daily_growth, colour = parent_pop)) + 
+   labs(x = "Weekly Avg Light (SlrW)", y = "Daily Growth Rate (cm/day)", 
+        title = "Effect of Light on Daily Growth Rate with Population") + 
+   theme_minimal()
+)
+```
