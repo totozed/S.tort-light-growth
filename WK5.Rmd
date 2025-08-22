@@ -1,6 +1,8 @@
 ---
 title: "WK5"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 date: "2025-07-31"
 ---
 
@@ -240,7 +242,7 @@ pred.pop <- ggpredict(growth_pop.lmer, terms = c("weekly_avg_SlrW2"))
 (ggplot(pred.pop) + 
    geom_line(aes(x = x, y = predicted)) +          # slope
    geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
-               fill = "lightgrey", alpha = 0.5) +  # error band
+               fill = "red", alpha = 0.5) +  # error band
    geom_point(data = plant_with_light,                      # adding the raw data (scaled values)
               aes(x = weekly_avg_SlrW2, y = daily_growth, colour = parent_pop)) + 
    labs(x = "Weekly Avg Light (SlrW)", y = "Daily Growth Rate (cm/day)", 
