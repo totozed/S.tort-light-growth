@@ -63,6 +63,9 @@ print(weekly_light)
 ```
 
 *Investigate or filter out plants that show negative growth*
+#Q: How could we deal with bad observations?
+#Solution: find out tolerance value and then filter out observance data lager than the tolerance value
+#Figure A: Histogram showing the frequency of decreases in plant height between consecutive surveys. Most negative growth values are close to zero, likely reflecting measurement noise, while a small number of extreme decreases (≤ –5 cm) suggest errors and were removed from subsequent analyses.
 
 ```{r}
 #PID
@@ -90,7 +93,7 @@ neg_growth_values <- plant_growth %>%
 ggplot(neg_growth_values, aes(x = growth)) +
   geom_histogram(binwidth = 0.5, fill = "red", color = "black") +
   labs(
-    title = "Distribution of Negative Growth Values",
+    title = "Figure A: Distribution of Negative Growth Values",
     x = "Height Decrease (cm)",
     y = "Count"
   ) +
@@ -135,6 +138,9 @@ plant_growth_daily <- plant_growth_cleaned %>%
 ```
 
 *Correlate Growth with Solar Radiation*
+#Q: How does plant growth correlate with solar radiation?
+#Test: Find correlation value and plot correlation
+#Figure B: Scatter plot showing the relationship between weekly average solar radiation (SlrW, W/m²) and daily growth rate (cm/day). Each point represents an observation, and the red line indicates the fitted linear regression. 
 
 ```{r}
 #Align plant growth data to week
@@ -159,7 +165,7 @@ print(cor_result)
 ggplot(plant_with_light, aes(x = weekly_avg_SlrW, y = daily_growth)) +
   geom_point(alpha = 0.2) +
   geom_smooth(method = "lm", color = "red") +
-  labs(title = "Correlation between Light and Growth", x = "Weekly Avg Light (SlrW)", y = "Daily Growth (cm/day)") +
+  labs(title = "Figure B: Correlation between Light and Growth", x = "Weekly Avg Light (SlrW)", y = "Daily Growth (cm/day)") +
   theme_bw()
 ```
 
@@ -182,7 +188,8 @@ plant_with_light <- plant_with_light %>%
 ```
 
 *use mixed-effect model to fit relationship between plant growth and light radiation with population as random effect*
-
+#Q: Does weekly solar radiation positively affect daily growth rate across all populations?
+#Test: Fit a mixed-effect model with population as a random slope.
 ```{r}
 growth_light.lmer <- lmer(
   daily_growth ~ weekly_avg_SlrW2 +                     
@@ -193,7 +200,8 @@ summary(growth_light.lmer)
 ```
 
 *overall effect of solar radiation on plant daily growth*
-
+#Figure C: Relationship between weekly average solar radiation and predicted daily growth rate (cm/day), aggregated across all populations. Each hexagon represents the density of observations. The black line shows the fitted regression slope
+.
 ```{r}
 #Unscaling
 pred_all <- ggpredict(growth_light.lmer, terms = "weekly_avg_SlrW2") %>%
@@ -210,7 +218,7 @@ p_overall <- ggplot() +
               alpha = .22, fill = "grey60") +
   geom_line(data = pred_all,
             aes(x = light_orig, y = predicted), linewidth = 1) +
-  labs(title = "Effect of Weekly Light on Daily Growth (overall)",
+  labs(title = "Figure C: Effect of Weekly Light on Daily Growth (overall)",
        x = "Weekly Avg Light (W/m²)",
        y = "Predicted Daily Growth (cm/day)") +
   theme_bw() +
@@ -219,6 +227,10 @@ p_overall
 ```
 
 *Effect of solar radiation on plant daily growth by population*
+#Q: Do different populations vary in their growth response to weekly solar radiation?
+#Test: For visualization, scatter plots with fitted regression lines were drawn separately for each population.
+#Figure D: Light–growth relationship by population.
+#Scatter plots show daily growth rate (cm/day) against weekly average solar radiation (W/m²) for 22 populations. Each panel corresponds to one population, with the blue line indicating the fitted linear trend.
 
 ```{r}
 p_facet <- ggplot(plant_with_light,
@@ -226,7 +238,7 @@ p_facet <- ggplot(plant_with_light,
   facet_wrap(~ parent_pop, ncol = 6) +
   geom_point(alpha = .15, size = .6, color = "grey35") +
   geom_smooth(method = "lm", se = FALSE, linewidth = .8) +
-  labs(title = "Light–Growth relationship by population",
+  labs(title = "Figure D: Light–Growth relationship by population",
        x = "Weekly Avg Light (W/m²)",
        y = "Daily Growth (cm/day)") +
   theme_bw() +
@@ -237,7 +249,10 @@ p_facet
 ```
 
 *Find slope of plant growth and solar radiation for each population*
-
+#Q: Which populations show significantly positive or negligible slopes in the light–growth relationship?
+#Method: Extract slopes and 95% confidence intervals for each population from the mixed-effects model
+#Figure E. Population-specific slopes with 95% confidence intervals. 
+#Forest plot showing estimated slopes of daily growth rate against weekly average solar radiation for 22 populations. Points represent population-specific slopes (cm/day per W/m²) and horizontal lines show 95% CIs. Several populations (e.g., TM2, CP3, FR, WL2, YO4) exhibit significantly positive slopes with CIs entirely above zero, indicating stronger growth response to light. Others (e.g., CC, IH, DPR) have slopes not significantly different from zero, suggesting little or no detectable response to light.
 ```{r}
 #slope and standard deviation of fixed effects
 b_fix  <- fixef(growth_light.lmer)["weekly_avg_SlrW2"]
@@ -279,7 +294,7 @@ ggplot(pop_slope, aes(x = reorder(parent_pop, slope_per_Wm2), y = slope_per_Wm2)
   geom_hline(yintercept = 0, linetype = 2) +
   geom_pointrange(aes(ymin = lower_per_Wm2, ymax = upper_per_Wm2), linewidth = .6) +
   coord_flip() +
-  labs(title = "Population-specific slopes with 95% CI",
+  labs(title = "Figure E: Population-specific slopes with 95% CI",
        x = "Population", y = "Slope (cm/day per W/m²)") +
   theme_bw()
 ```
