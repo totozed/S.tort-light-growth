@@ -65,7 +65,7 @@ print(weekly_light)
 *Investigate or filter out plants that show negative growth*
 #Q: How could we deal with bad observations?
 #Solution: find out tolerance value and then filter out observance data lager than the tolerance value
-#Figure A: Histogram showing the frequency of decreases in plant height between consecutive surveys. Most negative growth values are close to zero, likely reflecting measurement noise, while a small number of extreme decreases (≤ –5 cm) suggest errors and were removed from subsequent analyses.
+#Figure A: Histogram showing the frequency of decreases in plant height between consecutive surveys. Most negative growth values are close to zero, likely reflecting measurement noise, while a small number of extreme decreases (<=–5 cm) suggest errors and were removed from subsequent analyses.
 
 ```{r}
 #PID
