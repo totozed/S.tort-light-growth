@@ -1,10 +1,16 @@
 ---
 title: "WK11_2022_23"
-output: html_document
+output:
+  pdf_document:
+    latex_engine: xelatex
+    keep_tex: true
+header-includes:
+  - \usepackage{ctex} 
 date: "2025-09-09"
 ---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+#tinytex::tlmgr_install("ctex")
 ```
 
 ```{r}
