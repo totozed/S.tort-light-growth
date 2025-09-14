@@ -3,27 +3,297 @@ title: "WK11_2022_23"
 output: html_document
 date: "2025-09-09"
 ---
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(janitor)
+library(purrr)
+library(readr)
+library(ggthemes)
+library(ggeffects)
+library(lme4)
+library(dplyr)
+library(ggplot2)
+library(emmeans)      
+library(broom.mixed)  
+library(viridis)      
+library(nlme)         
+library(mgcv)         
+setwd("C:/Users/Tobyz/Desktop/Toby在大学/Maloof Lab/S.tort-light-growth/Data")
 ```
 
-## Including Plots
+*import plant data*
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+plant_2223 <- read.csv("C:/Users/Tobyz/Desktop/Toby在大学/Maloof Lab/S.tort-light-growth/Data/UCD_2022_23_size_data_combined.csv") %>%
+  clean_names() %>%
+  mutate(survey_date = as.Date(survey_date, format = "%m/%d/%Y"))
+summary(plant_2223)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+*import light data*
+
+```{r}
+light_raw_2223 <- read_csv("C:/Users/Tobyz/Desktop/Toby在大学/Maloof Lab/S.tort-light-growth/Data/UCD_met_data.csv")%>%clean_names()%>%
+ mutate(
+    date = mdy(date),
+    sol_rad_ly_day = as.numeric(sol_rad_ly_day),  # turn into number format
+  )
+```
+
+*Investigate or filter out plants that show negative growth*
+#Q: How could we deal with bad observations?
+#Solution: find out tolerance value and then filter out observance data lager than the tolerance value
+#Figure A: Histogram showing the frequency of decreases in plant height between consecutive surveys. Most negative growth values are close to zero, likely reflecting measurement noise, while a small number of extreme decreases (<=–5 cm) suggest errors and were removed from subsequent analyses.
+
+```{r}
+#PID
+pl_gr <- plant_2223 %>%
+  unite("PID", pop:rep, sep = "_", remove = FALSE) %>%
+  mutate(survey_date = as.Date(survey_date))
+
+#find out plants with negative growth
+pl_gr %>%
+  arrange(PID, survey_date) %>%  # arrange in time sequence
+  group_by(PID) %>%
+  mutate(growth = height - lag(height)) %>%  # find out the diff btw nearby dates
+  summarise(has_negative_growth = any(growth < 0, na.rm = TRUE)) %>% 
+  filter(has_negative_growth) -> neg_gr_pl
+neg_gr_pl
+
+#find out tolerance value
+neg_gr_v <- pl_gr %>%
+  arrange(PID, survey_date) %>%
+  group_by(PID) %>%
+  mutate(growth = height - lag(height)) %>%
+  ungroup() %>%
+  filter(growth < 0)
+
+ggplot(neg_gr_v, aes(x = growth)) +
+  geom_histogram(binwidth = 0.5, fill = "red", color = "black") +
+  labs(
+    title = "Figure A: Distribution of Negative Growth Values",
+    x = "Height Decrease (cm)",
+    y = "Count"
+  ) +
+  theme_bw()
+
+#filter out plants with negative growth < -5
+pl_gr_cleaned <- pl_gr
+
+repeat {
+  pl_gr_cleaned <- pl_gr_cleaned %>%
+    arrange(PID, survey_date) %>%
+    group_by(PID) %>%
+    mutate(growth = height - lag(height)) %>%
+    filter(is.na(growth) | growth >= -5) %>%
+    select(-growth) %>%
+    ungroup()
+
+  check <- pl_gr_cleaned %>%
+    arrange(PID, survey_date) %>%
+    group_by(PID) %>%
+    mutate(growth = height - lag(height)) %>%
+    filter(growth < -5)
+  
+  if (nrow(check) == 0) break
+}
+```
+
+*Measure Growth via Daily Growth Rate*
+
+```{r}
+#define daily growth rate
+pl_gr_daily <- pl_gr_cleaned %>%
+  arrange(PID, survey_date) %>%
+  group_by(PID) %>%
+  mutate(
+    prev_height = lag(height),
+    prev_date = lag(survey_date),
+    days_elapsed = as.numeric(survey_date - prev_date),
+    daily_growth = (height - prev_height) / days_elapsed
+  ) %>%
+  ungroup()
+```
+
+*Calculate Daily Mean Solar Radiation*
+
+```{r}
+pl_lt <- pl_gr_daily %>%
+  rowwise() %>%
+  mutate(
+    mean_light_ly_day = mean(
+      light_raw_2223$sol_rad_ly_day[
+        !is.na(light_raw_2223$date) &
+        light_raw_2223$date > prev_date &
+        light_raw_2223$date <= survey_date
+      ],
+      na.rm = TRUE
+    ),
+    n_days_light = sum(
+      !is.na(light_raw_2223$date) &
+      light_raw_2223$date > prev_date &
+      light_raw_2223$date <= survey_date,
+      na.rm = TRUE
+    )
+  ) %>%
+  ungroup()
+
+```
+
+*Correlate Growth with Solar Radiation*
+#Q: How does plant growth correlate with solar radiation?
+#Test: Find correlation value and plot correlation
+#Figure B: Scatter plot showing the relationship between daily average solar radiation (ly/day) and daily growth rate (cm/day). Each point represents an observation, and the red line indicates the fitted linear regression. 
+
+```{r}
+cor_result <- cor(
+  pl_lt$daily_growth,
+  pl_lt$mean_light_ly_day,
+use = "complete.obs"
+)
+
+print(cor_result)
+
+#Plot correlation
+ggplot(pl_lt, aes(x = mean_light_ly_day, y = daily_growth)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method = "lm", color = "red") +
+  labs(title = "Figure B: Correlation between Light and Growth", x = "Daily Avg Light (ly/day)", y = "Daily Growth (cm/day)") +
+  theme_bw()
+```
+
+*Process data*
+
+```{r}
+#Standardization
+pl_lt$mean_light_ly_day2 <- scale(pl_lt$mean_light_ly_day, center = TRUE, scale = TRUE)
+mean_lt <- mean(pl_lt$mean_light_ly_day, na.rm = TRUE)
+sd_lt   <- sd(pl_lt$mean_light_ly_day, na.rm = TRUE)
+
+#Change Data type
+pl_lt <- pl_lt %>%
+  mutate(
+    pop = factor(pop),
+    PID        = factor(PID),
+    block      = factor(block)
+  )
+
+```
+
+*use mixed-effect model to fit relationship between plant growth and light radiation with population as random effect*
+#Q: Does daily solar radiation positively affect daily growth rate across all populations?
+#Test: Fit a mixed-effect model with population as a random slope.
+
+```{r}
+pl_lt.lmer <- lmer(
+  daily_growth ~ mean_light_ly_day2 +                     
+    (1 + mean_light_ly_day2 | pop),                                    
+  data = pl_lt, REML = TRUE
+)
+summary(pl_lt.lmer)
+```
+
+*overall effect of solar radiation on plant daily growth*
+#Figure C: Relationship between daily average solar radiation and predicted daily growth rate (cm/day), aggregated across all populations. Each hexagon represents the density of observations. The black line shows the fitted regression slope
+.
+```{r}
+#Unscaling
+pred_all <- ggpredict(pl_lt.lmer, terms = "mean_light_ly_day2") %>%
+  as.data.frame() %>%
+  mutate(light_orig = x * sd_lt + mean_lt)
+
+#Plot
+p_overall <- ggplot() +
+  geom_hex(data = pl_lt,
+           aes(x = mean_light_ly_day, y = daily_growth), bins = 35) +
+  scale_fill_viridis_c(name = "Count") +
+  geom_ribbon(data = pred_all,
+              aes(x = light_orig, ymin = conf.low, ymax = conf.high),
+              alpha = .22, fill = "grey60") +
+  geom_line(data = pred_all,
+            aes(x = light_orig, y = predicted), linewidth = 1) +
+  labs(title = "Figure C: Effect of Daily Light on Daily Growth (overall)",
+       x = "Daily Avg Light (ly/day)",
+       y = "Predicted Daily Growth (cm/day)") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+p_overall
+```
+
+*Effect of solar radiation on plant daily growth by population*
+#Q: Do different populations vary in their growth response to daily solar radiation?
+#Test: For visualization, scatter plots with fitted regression lines were drawn separately for each population.
+#Figure D: Light–growth relationship by population.
+#Scatter plots show daily growth rate (cm/day) against daily average solar radiation (ly/day) for 22 populations. Each panel corresponds to one population, with the blue line indicating the fitted linear trend.
+
+```{r}
+p_facet <- ggplot(pl_lt,
+                  aes(mean_light_ly_day, daily_growth)) +
+  facet_wrap(~ pop, ncol = 6) +
+  geom_point(alpha = .15, size = .6, color = "grey35") +
+  geom_smooth(method = "lm", se = FALSE, linewidth = .8) +
+  labs(title = "Figure D: Light–Growth relationship by population",
+       x = "Daily Avg Light (ly/day)",
+       y = "Daily Growth (cm/day)") +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "grey95", color = NA),
+        strip.text = element_text(face = "bold"),
+        panel.grid.minor = element_blank())
+p_facet
+```
+
+*Find slope of plant growth and solar radiation for each population*
+#Q: Which populations show significantly positive or negligible slopes in the light–growth relationship?
+#Method: Extract slopes and 95% confidence intervals for each population from the mixed-effects model
+#Figure E. Population-specific slopes with 95% confidence intervals. 
+#The slope of the light–growth relationship (cm/day per Ly/day) is shown for each population. Points indicate estimated slopes and horizontal lines show 95% CIs. The vertical dashed line marks zero effect. Most populations exhibit positive slopes, suggesting that higher solar radiation is generally associated with faster daily growth, although the strength and significance of this relationship vary across populations.
+```{r}
+#slope and standard deviation of fixed effects
+b_fix  <- fixef(pl_lt.lmer)["mean_light_ly_day2"]
+V_fix  <- vcov(pl_lt.lmer)["mean_light_ly_day2","mean_light_ly_day2"]
+
+#slope and standard deviation of random effects
+re <- ranef(pl_lt.lmer, condVar = TRUE) 
+re_pop <- re$pop
+postVar <- attr(re$pop, "postVar")           
+sl_col <- which(colnames(re_pop) == "mean_light_ly_day2")
+
+#create the tibble of slopes for each population
+pop_slope <- tibble(
+  parent_pop   = rownames(re_pop),
+  rand_slope   = re_pop[ , "mean_light_ly_day2"],
+  rand_var     = sapply(seq_len(dim(postVar)[3]), function(i) postVar[sl_col, sl_col, i])
+) %>%
+  mutate(
+    slope_SD   = b_fix + rand_slope,                        
+    se_SD      = sqrt(V_fix + rand_var),               
+    lower_SD   = slope_SD - 1.96*se_SD,
+    upper_SD   = slope_SD + 1.96*se_SD
+  )
+
+pop_slope <- pop_slope %>%
+  mutate(
+    slope_per_Wm2 = slope_SD / sd_lt,
+    lower_per_Wm2 = lower_SD / sd_lt,
+    upper_per_Wm2 = upper_SD / sd_lt
+  )%>%
+  select(parent_pop, slope_per_Wm2, lower_per_Wm2, upper_per_Wm2)
+pop_slope
+write.csv(pop_slope, "population_slopes.csv", row.names = FALSE)
+
+#plot
+ggplot(pop_slope, aes(x = reorder(parent_pop, slope_per_Wm2), y = slope_per_Wm2)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_pointrange(aes(ymin = lower_per_Wm2, ymax = upper_per_Wm2), linewidth = .6) +
+  coord_flip() +
+  labs(title = "Figure E: Population-specific slopes with 95% CI",
+       x = "Population", y = "Slope (cm/day per ly/day)") +
+  theme_bw()
+```
+
