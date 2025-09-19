@@ -318,22 +318,22 @@ light_daily <- light_daily %>%
   mutate(light_y = scales::rescale(SlrW_mean, to = y_rng, from = light_rng))
 
 plant_with_light%>%
-  group_by(parent_pop)%>%
-  ggplot(aes(survey_date, height_cm, colour = weekly_avg_SlrW)) +
-  geom_line(data = light_daily,
-            aes(x = date, y = light_y),
-            colour = "black", linewidth = 0.5, alpha= 0.25) +
+#  group_by(parent_pop)%>%
+  ggplot(aes(survey_date, height_cm, colour = weekly_avg_SlrW, group=PID)) +
+#  geom_line(data = light_daily,
+#            aes(x = date, y = light_y),
+#            colour = "black", linewidth = 0.5, alpha= 0.25) +
   facet_wrap(~parent_pop)+
-  scale_colour_gradientn(                         # 低=蓝，高=红
+  scale_colour_gradientn(                         # low=blue, high=red
     colours = c("#2c7bb6","#abd9e9","#ffffbf","#fdae61","#d7191c"),
     name = "solar radiation (W/m²)")+
   geom_point(alpha=0.25,size=0.5)+
-  geom_line(alpha=1, size=1) +
+  geom_line(alpha=0.5) +
   scale_x_date(date_breaks = "1 month", date_labels = "%b") +
    scale_y_continuous(
-    name = "Height (cm)",
-    sec.axis = sec_axis(~ scales::rescale(., from = y_rng, to = light_rng),
-                        name = "Solar Radiation (W/m²)"))+
+    name = "Height (cm)")+
+#    sec.axis = sec_axis(~ scales::rescale(., from = y_rng, to = light_rng),
+#                        name = "Solar Radiation (W/m²)"))+
   labs(title = "Figure F: Time-Height",
        x = "Survey Date",
        y = "Height (cm)") +
