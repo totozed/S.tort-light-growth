@@ -720,4 +720,141 @@ relationship vary across populations.
 
 \pandocbounded{\includegraphics[keepaspectratio]{WK11_2022_23_files/figure-latex/unnamed-chunk-12-1.pdf}}
 
+\emph{height\_time plot with solar radiation as color}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{pl\_lt}\SpecialCharTok{\%\textgreater{}\%}
+  \FunctionTok{ggplot}\NormalTok{(}\FunctionTok{aes}\NormalTok{(survey\_date, height, }\AttributeTok{colour =}\NormalTok{ mean\_light\_ly\_day, }\AttributeTok{group=}\NormalTok{PID)) }\SpecialCharTok{+}
+  \FunctionTok{facet\_wrap}\NormalTok{(}\SpecialCharTok{\textasciitilde{}}\NormalTok{pop)}\SpecialCharTok{+}
+  \FunctionTok{scale\_colour\_gradientn}\NormalTok{(                         }\CommentTok{\# low=blue, high=red}
+    \AttributeTok{colours =} \FunctionTok{c}\NormalTok{(}\StringTok{"\#2c7bb6"}\NormalTok{,}\StringTok{"\#abd9e9"}\NormalTok{,}\StringTok{"\#ffffbf"}\NormalTok{,}\StringTok{"\#fdae61"}\NormalTok{,}\StringTok{"\#d7191c"}\NormalTok{),}
+    \AttributeTok{name =} \StringTok{"Solar Radiation (W/m²)"}\NormalTok{)}\SpecialCharTok{+}
+  \FunctionTok{geom\_point}\NormalTok{(}\AttributeTok{alpha=}\FloatTok{0.25}\NormalTok{,}\AttributeTok{size=}\FloatTok{0.5}\NormalTok{)}\SpecialCharTok{+}
+  \FunctionTok{geom\_line}\NormalTok{(}\AttributeTok{alpha=}\FloatTok{0.5}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{scale\_x\_date}\NormalTok{(}\AttributeTok{date\_breaks =} \StringTok{"1 month"}\NormalTok{, }\AttributeTok{date\_labels =} \StringTok{"\%b"}\NormalTok{) }\SpecialCharTok{+}
+   \FunctionTok{scale\_y\_continuous}\NormalTok{(}
+    \AttributeTok{name =} \StringTok{"Height (cm)"}\NormalTok{)}\SpecialCharTok{+}
+  \FunctionTok{labs}\NormalTok{(}\AttributeTok{title =} \StringTok{"Figure F.1: Time{-}Height"}\NormalTok{,}
+       \AttributeTok{x =} \StringTok{"Survey Date"}\NormalTok{,}
+       \AttributeTok{y =} \StringTok{"Height (cm)"}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{guides}\NormalTok{(}\AttributeTok{x =} \FunctionTok{guide\_axis}\NormalTok{(}\AttributeTok{n.dodge =} \DecValTok{2}\NormalTok{))}\SpecialCharTok{+}
+  \FunctionTok{theme\_bw}\NormalTok{()}\SpecialCharTok{+}
+  \FunctionTok{theme}\NormalTok{(}\AttributeTok{axis.text.x =} \FunctionTok{element\_text}\NormalTok{(}\AttributeTok{angle=}\DecValTok{30}\NormalTok{))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Warning: Removed 10542 rows containing missing values or values outside the scale range
+## (`geom_point()`).
+\end{verbatim}
+
+\begin{verbatim}
+## Warning: Removed 10533 rows containing missing values or values outside the scale range
+## (`geom_line()`).
+\end{verbatim}
+
+\begin{verbatim}
+## `geom_line()`: Each group consists of only one observation.
+## i Do you need to adjust the group aesthetic?
+\end{verbatim}
+
+\pandocbounded{\includegraphics[keepaspectratio]{WK11_2022_23_files/figure-latex/unnamed-chunk-13-1.pdf}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{pl\_lt}\SpecialCharTok{\%\textgreater{}\%}
+  \FunctionTok{filter}\NormalTok{(pop}\SpecialCharTok{==}\StringTok{"TM2"}\NormalTok{)}\SpecialCharTok{\%\textgreater{}\%}
+  \FunctionTok{ggplot}\NormalTok{(}\FunctionTok{aes}\NormalTok{(survey\_date, height, }\AttributeTok{colour =}\NormalTok{ mean\_light\_ly\_day, }\AttributeTok{group=}\NormalTok{PID)) }\SpecialCharTok{+}
+  \FunctionTok{scale\_colour\_gradientn}\NormalTok{(                         }\CommentTok{\# low=blue, high=red}
+    \AttributeTok{colours =} \FunctionTok{c}\NormalTok{(}\StringTok{"\#2c7bb6"}\NormalTok{,}\StringTok{"\#abd9e9"}\NormalTok{,}\StringTok{"\#ffffbf"}\NormalTok{,}\StringTok{"\#fdae61"}\NormalTok{,}\StringTok{"\#d7191c"}\NormalTok{),}
+    \AttributeTok{name =} \StringTok{"Solar Radiation (W/m²)"}\NormalTok{)}\SpecialCharTok{+}
+  \FunctionTok{geom\_point}\NormalTok{(}\AttributeTok{alpha=}\DecValTok{1}\NormalTok{,}\AttributeTok{size=}\FloatTok{0.5}\NormalTok{)}\SpecialCharTok{+}
+  \FunctionTok{geom\_line}\NormalTok{(}\AttributeTok{alpha=}\DecValTok{1}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{scale\_x\_date}\NormalTok{(}\AttributeTok{date\_breaks =} \StringTok{"1 month"}\NormalTok{, }\AttributeTok{date\_labels =} \StringTok{"\%b"}\NormalTok{) }\SpecialCharTok{+}
+   \FunctionTok{scale\_y\_continuous}\NormalTok{(}
+    \AttributeTok{name =} \StringTok{"Height (cm)"}\NormalTok{)}\SpecialCharTok{+}
+  \FunctionTok{labs}\NormalTok{(}\AttributeTok{title =} \StringTok{"Figure F.2: Time{-}Height for TM2"}\NormalTok{,}
+       \AttributeTok{x =} \StringTok{"Survey Date"}\NormalTok{,}
+       \AttributeTok{y =} \StringTok{"Height (cm)"}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{theme\_bw}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Warning: Removed 379 rows containing missing values or values outside the scale range
+## (`geom_point()`).
+\end{verbatim}
+
+\begin{verbatim}
+## Warning: Removed 377 rows containing missing values or values outside the scale range
+## (`geom_line()`).
+\end{verbatim}
+
+\pandocbounded{\includegraphics[keepaspectratio]{WK11_2022_23_files/figure-latex/unnamed-chunk-14-1.pdf}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{pl\_lt}\SpecialCharTok{\%\textgreater{}\%}
+  \FunctionTok{filter}\NormalTok{(pop}\SpecialCharTok{==}\StringTok{"BH"}\NormalTok{)}\SpecialCharTok{\%\textgreater{}\%}
+  \FunctionTok{ggplot}\NormalTok{(}\FunctionTok{aes}\NormalTok{(survey\_date, height, }\AttributeTok{colour =}\NormalTok{ mean\_light\_ly\_day, }\AttributeTok{group=}\NormalTok{PID)) }\SpecialCharTok{+}
+  \FunctionTok{scale\_colour\_gradientn}\NormalTok{(                         }\CommentTok{\# low=blue, high=red}
+    \AttributeTok{colours =} \FunctionTok{c}\NormalTok{(}\StringTok{"\#2c7bb6"}\NormalTok{,}\StringTok{"\#abd9e9"}\NormalTok{,}\StringTok{"\#ffffbf"}\NormalTok{,}\StringTok{"\#fdae61"}\NormalTok{,}\StringTok{"\#d7191c"}\NormalTok{),}
+    \AttributeTok{name =} \StringTok{"Solar Radiation (W/m²)"}\NormalTok{)}\SpecialCharTok{+}
+  \FunctionTok{geom\_point}\NormalTok{(}\AttributeTok{alpha=}\DecValTok{1}\NormalTok{,}\AttributeTok{size=}\FloatTok{0.5}\NormalTok{)}\SpecialCharTok{+}
+  \FunctionTok{geom\_line}\NormalTok{(}\AttributeTok{alpha=}\DecValTok{1}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{scale\_x\_date}\NormalTok{(}\AttributeTok{date\_breaks =} \StringTok{"1 month"}\NormalTok{, }\AttributeTok{date\_labels =} \StringTok{"\%b"}\NormalTok{) }\SpecialCharTok{+}
+   \FunctionTok{scale\_y\_continuous}\NormalTok{(}
+    \AttributeTok{name =} \StringTok{"Height (cm)"}\NormalTok{)}\SpecialCharTok{+}
+  \FunctionTok{labs}\NormalTok{(}\AttributeTok{title =} \StringTok{"Figure F.3: Time{-}Height for BH"}\NormalTok{,}
+       \AttributeTok{x =} \StringTok{"Survey Date"}\NormalTok{,}
+       \AttributeTok{y =} \StringTok{"Height (cm)"}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{theme\_bw}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Warning: Removed 1176 rows containing missing values or values outside the scale range
+## (`geom_point()`).
+\end{verbatim}
+
+\begin{verbatim}
+## Warning: Removed 1174 rows containing missing values or values outside the scale range
+## (`geom_line()`).
+\end{verbatim}
+
+\pandocbounded{\includegraphics[keepaspectratio]{WK11_2022_23_files/figure-latex/unnamed-chunk-15-1.pdf}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{pl\_lt}\SpecialCharTok{\%\textgreater{}\%}
+  \FunctionTok{filter}\NormalTok{(pop}\SpecialCharTok{==}\StringTok{"DPR"}\NormalTok{)}\SpecialCharTok{\%\textgreater{}\%}
+  \FunctionTok{ggplot}\NormalTok{(}\FunctionTok{aes}\NormalTok{(survey\_date, height, }\AttributeTok{colour =}\NormalTok{ mean\_light\_ly\_day, }\AttributeTok{group=}\NormalTok{PID)) }\SpecialCharTok{+}
+  \FunctionTok{scale\_colour\_gradientn}\NormalTok{(                         }\CommentTok{\# low=blue, high=red}
+    \AttributeTok{colours =} \FunctionTok{c}\NormalTok{(}\StringTok{"\#2c7bb6"}\NormalTok{,}\StringTok{"\#abd9e9"}\NormalTok{,}\StringTok{"\#ffffbf"}\NormalTok{,}\StringTok{"\#fdae61"}\NormalTok{,}\StringTok{"\#d7191c"}\NormalTok{),}
+    \AttributeTok{name =} \StringTok{"Solar Radiation (W/m²)"}\NormalTok{)}\SpecialCharTok{+}
+  \FunctionTok{geom\_point}\NormalTok{(}\AttributeTok{alpha=}\DecValTok{1}\NormalTok{,}\AttributeTok{size=}\FloatTok{0.5}\NormalTok{)}\SpecialCharTok{+}
+  \FunctionTok{geom\_line}\NormalTok{(}\AttributeTok{alpha=}\DecValTok{1}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{scale\_x\_date}\NormalTok{(}\AttributeTok{date\_breaks =} \StringTok{"1 month"}\NormalTok{, }\AttributeTok{date\_labels =} \StringTok{"\%b"}\NormalTok{) }\SpecialCharTok{+}
+   \FunctionTok{scale\_y\_continuous}\NormalTok{(}
+    \AttributeTok{name =} \StringTok{"Height (cm)"}\NormalTok{)}\SpecialCharTok{+}
+  \FunctionTok{labs}\NormalTok{(}\AttributeTok{title =} \StringTok{"Figure F.4: Time{-}Height for DPR"}\NormalTok{,}
+       \AttributeTok{x =} \StringTok{"Survey Date"}\NormalTok{,}
+       \AttributeTok{y =} \StringTok{"Height (cm)"}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{theme\_bw}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Warning: Removed 291 rows containing missing values or values outside the scale range
+## (`geom_point()`).
+\end{verbatim}
+
+\begin{verbatim}
+## Warning: Removed 291 rows containing missing values or values outside the scale range
+## (`geom_line()`).
+\end{verbatim}
+
+\pandocbounded{\includegraphics[keepaspectratio]{WK11_2022_23_files/figure-latex/unnamed-chunk-16-1.pdf}}
+
 \end{document}

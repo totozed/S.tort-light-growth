@@ -11,6 +11,11 @@ date: "2025-09-09"
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 #tinytex::tlmgr_install("ctex")
+#tinytex::tlmgr_update(self = TRUE)     # 更新 tlmgr 本身
+#tinytex::tlmgr_update(all  = TRUE)     # 更新所有 LaTeX 包
+#tinytex::tlmgr_install(c("latex-bin", "l3kernel", "l3packages", "l3backend"))
+#system2(tinytex::tlmgr_path(), args = c("fmtutil-sys", "--all"))
+
 ```
 
 ```{r}
@@ -259,6 +264,7 @@ p_facet
 #Method: Extract slopes and 95% confidence intervals for each population from the mixed-effects model
 #Figure E. Population-specific slopes with 95% confidence intervals. 
 #The slope of the light–growth relationship (cm/day per Ly/day) is shown for each population. Points indicate estimated slopes and horizontal lines show 95% CIs. The vertical dashed line marks zero effect. Most populations exhibit positive slopes, suggesting that higher solar radiation is generally associated with faster daily growth, although the strength and significance of this relationship vary across populations.
+
 ```{r}
 #slope and standard deviation of fixed effects
 b_fix  <- fixef(pl_lt.lmer)["mean_light_ly_day2"]
@@ -300,6 +306,83 @@ ggplot(pop_slope, aes(x = reorder(parent_pop, slope_per_Wm2), y = slope_per_Wm2)
   coord_flip() +
   labs(title = "Figure E: Population-specific slopes with 95% CI",
        x = "Population", y = "Slope (cm/day per ly/day)") +
+  theme_bw()
+```
+
+*height_time plot with solar radiation as color*
+
+```{r}
+pl_lt%>%
+  ggplot(aes(survey_date, height, colour = mean_light_ly_day, group=PID)) +
+  facet_wrap(~pop)+
+  scale_colour_gradientn(                         # low=blue, high=red
+    colours = c("#2c7bb6","#abd9e9","#ffffbf","#fdae61","#d7191c"),
+    name = "Solar Radiation (W/m²)")+
+  geom_point(alpha=0.25,size=0.5)+
+  geom_line(alpha=0.5) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+   scale_y_continuous(
+    name = "Height (cm)")+
+  labs(title = "Figure F.1: Time-Height",
+       x = "Survey Date",
+       y = "Height (cm)") +
+  guides(x = guide_axis(n.dodge = 2))+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle=30))
+
+```
+
+```{r}
+pl_lt%>%
+  filter(pop=="TM2")%>%
+  ggplot(aes(survey_date, height, colour = mean_light_ly_day, group=PID)) +
+  scale_colour_gradientn(                         # low=blue, high=red
+    colours = c("#2c7bb6","#abd9e9","#ffffbf","#fdae61","#d7191c"),
+    name = "Solar Radiation (W/m²)")+
+  geom_point(alpha=1,size=0.5)+
+  geom_line(alpha=1) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+   scale_y_continuous(
+    name = "Height (cm)")+
+  labs(title = "Figure F.2: Time-Height for TM2",
+       x = "Survey Date",
+       y = "Height (cm)") +
+  theme_bw()
+```
+
+```{r}
+pl_lt%>%
+  filter(pop=="BH")%>%
+  ggplot(aes(survey_date, height, colour = mean_light_ly_day, group=PID)) +
+  scale_colour_gradientn(                         # low=blue, high=red
+    colours = c("#2c7bb6","#abd9e9","#ffffbf","#fdae61","#d7191c"),
+    name = "Solar Radiation (W/m²)")+
+  geom_point(alpha=1,size=0.5)+
+  geom_line(alpha=1) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+   scale_y_continuous(
+    name = "Height (cm)")+
+  labs(title = "Figure F.3: Time-Height for BH",
+       x = "Survey Date",
+       y = "Height (cm)") +
+  theme_bw()
+```
+
+```{r}
+pl_lt%>%
+  filter(pop=="DPR")%>%
+  ggplot(aes(survey_date, height, colour = mean_light_ly_day, group=PID)) +
+  scale_colour_gradientn(                         # low=blue, high=red
+    colours = c("#2c7bb6","#abd9e9","#ffffbf","#fdae61","#d7191c"),
+    name = "Solar Radiation (W/m²)")+
+  geom_point(alpha=1,size=0.5)+
+  geom_line(alpha=1) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+   scale_y_continuous(
+    name = "Height (cm)")+
+  labs(title = "Figure F.4: Time-Height for DPR",
+       x = "Survey Date",
+       y = "Height (cm)") +
   theme_bw()
 ```
 
