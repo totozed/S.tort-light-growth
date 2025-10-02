@@ -154,7 +154,6 @@ pl_lt <- pl_gr_daily %>%
     )
   ) %>%
   ungroup()
-
 ```
 
 *Correlate Growth with Solar Radiation*
@@ -194,7 +193,7 @@ pl_lt <- pl_lt %>%
     PID        = factor(PID),
     block      = factor(block)
   )
-
+write.csv(pl_lt, "Data/pl_lt", row.names=FALSE)
 ```
 
 *use mixed-effect model to fit relationship between plant growth and light radiation with population as random effect*

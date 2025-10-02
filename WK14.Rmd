@@ -1,0 +1,57 @@
+---
+title: "WK14"
+output: pdf_document
+date: "2025-10-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(janitor)
+library(purrr)
+library(readr)
+library(ggthemes)
+library(ggeffects)
+library(lme4)
+library(dplyr)
+library(ggplot2)
+```
+
+*mixed-effect model by including time as fixed-effect for 2022 to 2023*
+
+```{r}
+pl_lt <- read.csv("Data/pl_lt.csv")%>% mutate(survey_date = as.Date(survey_date))
+pl_lt <- pl_lt %>%
+  arrange(survey_date) %>%
+  mutate(
+    week = as.integer((as.numeric(survey_date - min(survey_date)) %/% 7) + 1)
+  )
+pl_lt_t.lmer <- lmer(
+  daily_growth ~ mean_light_ly_day2 + week + (1 + mean_light_ly_day2 + week | pop),                                    
+  data = pl_lt, REML = TRUE
+)
+summary  (pl_lt_t.lmer)
+```
+
+*mixed-effect model for 2023*
+
+```{r}
+plant_with_light <- read.csv("Data/plant_with_light.csv")%>% mutate(survey_date = as.Date(survey_date))
+plant_with_light <- plant_with_light %>%
+  arrange(survey_date) %>%
+  mutate(
+    week = as.integer((as.numeric(survey_date - min(survey_date)) %/% 7) + 1)
+  )
+growth_light_time.lmer <- lmer(
+  daily_growth ~ weekly_avg_SlrW2 + week + (1 + weekly_avg_SlrW2 + week | parent_pop),                                    
+  data = plant_with_light, REML = TRUE
+)
+summary(growth_light_time.lmer)
+```
+
+

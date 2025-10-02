@@ -184,7 +184,7 @@ plant_with_light <- plant_with_light %>%
     PID        = factor(PID),
     block      = factor(block)
   )
-
+write.csv(plant_with_light, "Data/plant_with_light", row.names=FALSE)
 ```
 
 *use mixed-effect model to fit relationship between plant growth and light radiation with population as random effect*
