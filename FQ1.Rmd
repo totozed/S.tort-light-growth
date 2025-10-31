@@ -1,0 +1,95 @@
+---
+title: "FQ1"
+output: pdf_document
+date: "2025-10-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#install.packages("pkgbuild")
+#pkgbuild::check_build_tools(debug = TRUE)
+#install.packages(c("Rcpp", "RcppEigen", "cli", "rlang", "vctrs", "pillar", "lifecycle"))
+#install.packages(c("devtools","remotes"))
+#remotes::install_github("bcm-uga/lfmm",
+#                        dependencies = TRUE,
+#                        build_vignettes = FALSE,
+#                        force = TRUE)
+#install.packages("RSpectra")
+
+library(lme4) 
+library(tibble)
+library(dplyr)
+library(tidyverse)
+library(lfmm)
+library(RSpectra)
+load("pl_lt_t.lmer.RData")
+load("growth_light_time.lmer.RData")
+```
+
+```{r}
+ranef(pl_lt_t.lmer)$pop
+pheno_2022 <- ranef(pl_lt_t.lmer)$pop %>%
+  as_tibble(rownames = "pop",.name_repair = "unique")%>%
+  rename(blup_intercept = `(Intercept)...1`,
+         blup_light = `mean_light_ly_day2`) %>%
+  mutate(model = "Y2022")
+
+pheno_2023 <- ranef(growth_light_time.lmer)$parent_pop %>%
+  as_tibble(rownames = "parent_pop", .name_repair = "unique") %>%
+  rename(blup_intercept = `(Intercept)...1`,
+         blup_light = `weekly_avg_SlrW2`) %>%
+  mutate(model = "Y2023")
+
+geno_22 <- read.delim("Data/merged_maf_common_UCD2022.tsv", header = TRUE)
+geno_23 <- read.delim("Data/merged_maf_common_WL2_2023.tsv", header = TRUE)
+```
+
+```{r}
+Y <- as.matrix(geno_22[,-1])
+pc <- prcomp(Y)
+plot(pc$sdev[1:20]^2, xlab = 'PC', ylab = "Variance explained")
+points(2,pc$sdev[2]^2, type = "h", lwd = 3, col = "blue")
+```
+
+```{r}
+Y <- as.matrix(geno_22[,-1])
+Y <- t(Y)
+X <- matrix(scale(pheno_2022$blup_light), ncol = 1)
+rownames(X) <- pheno_2022$pop
+colnames(X) <- "blup_light"
+common <- intersect(rownames(X), rownames(Y))
+X <- X[common, , drop = FALSE]
+mod.lfmm <- lfmm_ridge(Y = Y, 
+                        X = X, 
+                        K = 2)
+```
+
+```{r}
+ ## performs association testing using the fitted model:
+ pv <- lfmm_test(Y = Y, 
+                 X = X, 
+                 lfmm = mod.lfmm, 
+                 calibrate = "gif")
+pvalues <- pv$calibrated.pvalue
+```
+
+```{r}
+#QQ plot
+qqplot(rexp(length(pvalues), rate = log(10)),
+       -log10(pvalues), xlab = "Expected quantile",
+       pch = 19, cex = .4)
+abline(0,1)
+```
+
+```{r}
+ ## Manhattan plot
+ plot(-log10(pvalues), 
+      pch = 19, 
+      cex = .2, 
+      xlab = "SNP", ylab = "-Log P",
+      col = "grey")
+```
+

@@ -33,10 +33,11 @@ pl_lt <- pl_lt %>%
   )
 pl_lt$week_f <- as.factor(pl_lt$week)
 pl_lt_t.lmer <- lmer(
-  daily_growth ~ mean_light_ly_day2 + week_f + (1 + mean_light_ly_day2 | pop),                                    
+  daily_growth ~ mean_light_ly_day2 + (1 + mean_light_ly_day2 | pop) + (week|pop),                                    
   data = pl_lt, REML = TRUE
 )
 summary  (pl_lt_t.lmer)
+save(pl_lt_t.lmer, file = "pl_lt_t.lmer.RData")
 ```
 
 *mixed-effect model for 2023*
@@ -50,10 +51,11 @@ plant_with_light <- plant_with_light %>%
   )
 plant_with_light$week_f <- as.factor(plant_with_light$week)
 growth_light_time.lmer <- lmer(
-  daily_growth ~ weekly_avg_SlrW2 + week_f+ (1 + weekly_avg_SlrW2 | parent_pop),                                    
+  daily_growth ~ weekly_avg_SlrW2 + (1 + weekly_avg_SlrW2 | parent_pop) + (week|parent_pop),                                    
   data = plant_with_light, REML = TRUE
-)
+) 
 summary(growth_light_time.lmer)
+save(growth_light_time.lmer, file = "growth_light_time.lmer.RData")
 ```
 
 
