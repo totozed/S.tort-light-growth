@@ -61,6 +61,7 @@ X <- matrix(scale(pheno_2022$blup_light), ncol = 1)
 rownames(X) <- pheno_2022$pop
 colnames(X) <- "blup_light"
 common <- intersect(rownames(X), rownames(Y))
+Y <- Y[common,]
 X <- X[common, , drop = FALSE]
 mod.lfmm <- lfmm_ridge(Y = Y, 
                         X = X, 
