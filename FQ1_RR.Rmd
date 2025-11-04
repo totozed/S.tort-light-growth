@@ -1,0 +1,148 @@
+---
+title: "FQ1"
+output: pdf_document
+date: "2025-10-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#install.packages("pkgbuild")
+#pkgbuild::check_build_tools(debug = TRUE)
+#install.packages(c("Rcpp", "RcppEigen", "cli", "rlang", "vctrs", "pillar", "lifecycle"))
+#install.packages(c("devtools","remotes"))
+#remotes::install_github("bcm-uga/lfmm",
+#                        dependencies = TRUE,
+#                        build_vignettes = FALSE,
+#                        force = TRUE)
+#install.packages("RSpectra")
+
+library(lme4) 
+library(tibble)
+library(dplyr)
+library(tidyverse)
+library(ggthemes)
+library(ggrepel)
+library(lfmm)
+library(RSpectra)
+load("pl_lt_t.lmer.RData")
+load("growth_light_time.lmer.RData")
+source("manhattan_plot.R")
+```
+
+```{r}
+ranef(pl_lt_t.lmer)$pop
+pheno_2022 <- ranef(pl_lt_t.lmer)$pop %>%
+  as_tibble(rownames = "pop",.name_repair = "unique")%>%
+  rename(blup_intercept = `(Intercept)...1`,
+         blup_light = `mean_light_ly_day2`) %>%
+  mutate(model = "Y2022")
+
+pheno_2023 <- ranef(growth_light_time.lmer)$parent_pop %>%
+  as_tibble(rownames = "parent_pop", .name_repair = "unique") %>%
+  rename(blup_intercept = `(Intercept)...1`,
+         blup_light = `weekly_avg_SlrW2`) %>%
+  mutate(model = "Y2023")
+
+geno_22 <- read.delim("Data/merged_maf_common_UCD2022.tsv", header = TRUE)
+geno_23 <- read.delim("Data/merged_maf_common_WL2_2023.tsv", header = TRUE)
+```
+
+```{r}
+Y <- as.matrix(geno_22[,-1])
+pc <- prcomp(Y)
+plot(pc$sdev[1:20]^2, xlab = 'PC', ylab = "Variance explained")
+points(2,pc$sdev[2]^2, type = "h", lwd = 3, col = "blue")
+```
+
+```{r}
+Y <- as.matrix(geno_22[,-1])
+Y <- t(Y)
+X <- matrix(scale(pheno_2022$blup_light), ncol = 1)
+rownames(X) <- pheno_2022$pop
+colnames(X) <- "blup_light"
+common <- intersect(rownames(X), rownames(Y))
+Y <- Y[common,]
+X <- X[common, , drop = FALSE]
+mod.lfmm <- lfmm_ridge(Y = Y, 
+                        X = X, 
+                        K = 2)
+```
+
+```{r}
+ ## performs association testing using the fitted model:
+ pv <- lfmm_test(Y = Y, 
+                 X = X, 
+                 lfmm = mod.lfmm, 
+                 calibrate = "gif")
+pvalues <- pv$calibrated.pvalue
+```
+
+```{r}
+#QQ plot
+qqplot(rexp(length(pvalues), rate = log(10)),
+       -log10(pvalues), xlab = "Expected quantile",
+       pch = 19, cex = .4)
+abline(0,1)
+```
+
+```{r}
+ ## Manhattan plot
+ plot(-log10(pvalues), 
+      pch = 19, 
+      cex = .2, 
+      xlab = "SNP", ylab = "-Log P",
+      col = "grey")
+```
+
+Create a data frame for plotting the manhattan plot.
+
+```{r}
+
+plot_data = tibble(loci = geno_22[,1], p_val = pv$pvalue[,1], calibrated.pvalue = pv$calibrated.pvalue[,1]) |>
+separate_wider_delim(loci, delim = ":", names = c("chr", "bp")) |>
+filter(str_detect(chr, "Chr")) |>
+mutate(p.bonf = p.adjust(p_val, method = "bonferroni"),
+bp = as.numeric(bp))
+
+
+light_manhattan = plot_manhattan(plot_data,
+                        chr_col = "chr",
+                        pos_col = "bp",
+                        value_col = "calibrated.pvalue",
+                        transform = "neglog10",
+                        title = "Light association",
+                        highlight_top_n = 20)
+
+print(light_manhattan)
+
+# Save plot
+ggsave("light_interaction.png", p_pbs0, width = 12, height = 6, dpi = 300)
+```
+
+
+Plot the correlation of allele frequency and the blups
+
+```{r}
+geno_table = Y
+colnames(geno_table) = geno_22[, 1]
+
+freq_plot_data = as.data.frame(X) |>
+rownames_to_column(var = "Population") |>
+mutate(loci1 = as.numeric(geno_table[, "Chr6:20652277"]),
+loci2 = as.numeric(geno_table[, "Chr4:5383224"]),
+loci3 = as.numeric(geno_table[, "Chr5:14295930"])) |>
+pivot_longer(cols = loci1:loci3, names_to = "loci", values_to = "frequency")
+
+freq_plot_data |>
+ggplot(aes(x = blup_light, y = frequency, label = Population)) +
+geom_point(size = 3) +
+geom_smooth(method = "lm", colour = "red") +
+geom_text_repel(size = 6) +
+facet_wrap(~loci, nrow = 1, scales = "free_y") +
+theme_minimal()+
+labs(x = "BLUP light", y = "Allele frequency")
+
+```
