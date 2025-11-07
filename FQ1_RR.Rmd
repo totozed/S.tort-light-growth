@@ -26,6 +26,7 @@ library(tidyverse)
 library(ggthemes)
 library(ggrepel)
 library(lfmm)
+library(patchwork)
 library(RSpectra)
 load("pl_lt_t.lmer.RData")
 load("growth_light_time.lmer.RData")
@@ -108,18 +109,18 @@ mutate(p.bonf = p.adjust(p_val, method = "bonferroni"),
 bp = as.numeric(bp))
 
 
-light_manhattan = plot_manhattan(plot_data,
+light_manhattan_UCD = plot_manhattan(plot_data,
                         chr_col = "chr",
                         pos_col = "bp",
                         value_col = "calibrated.pvalue",
                         transform = "neglog10",
-                        title = "Light association",
+                        title = "Light association UCD 2022",
                         highlight_top_n = 20)
 
-print(light_manhattan)
+print(light_manhattan_UCD)
 
 # Save plot
-ggsave("light_interaction.png", p_pbs0, width = 12, height = 6, dpi = 300)
+ggsave("light_interaction_UCD.png", light_manhattan_UCD, width = 12, height = 6, dpi = 300)
 ```
 
 
@@ -145,4 +146,65 @@ facet_wrap(~loci, nrow = 1, scales = "free_y") +
 theme_minimal()+
 labs(x = "BLUP light", y = "Allele frequency")
 
+```
+
+## Now run it for the WL2 garden
+
+```{r}
+Y_2023 <- as.matrix(geno_23[,-1])
+Y_2023 <- t(Y_2023)
+X_2023 <- matrix(scale(pheno_2023$blup_light), ncol = 1)
+rownames(X_2023) <- pheno_2023$parent_pop
+colnames(X_2023) <- "blup_light"
+common <- intersect(rownames(X_2023), rownames(Y_2023))
+Y_2023 <- Y_2023[common,]
+X_2023 <- X_2023[common, , drop = FALSE]
+mod.lfmm <- lfmm_ridge(Y = Y_2023, 
+                        X = X_2023, 
+                        K = 2)
+```
+
+```{r}
+ ## performs association testing using the fitted model:
+pv_2023 <- lfmm_test(Y = Y_2023, 
+                 X = X_2023, 
+                 lfmm = mod.lfmm, 
+                 calibrate = "gif")
+pvalues_2023 <- pv_2023$calibrated.pvalue
+```
+
+```{r}
+plot_data_2023 = tibble(loci = geno_23[,1], p_val = pv_2023$pvalue[,1], calibrated.pvalue = pv_2023$calibrated.pvalue[,1]) |>
+separate_wider_delim(loci, delim = ":", names = c("chr", "bp")) |>
+filter(str_detect(chr, "Chr")) |>
+mutate(p.bonf = p.adjust(p_val, method = "bonferroni"),
+bp = as.numeric(bp))
+
+
+light_manhattan_WL2 = plot_manhattan(plot_data_2023,
+                        chr_col = "chr",
+                        pos_col = "bp",
+                        value_col = "calibrated.pvalue",
+                        transform = "neglog10",
+                        title = "Light association WL2 2023",
+                        highlight_top_n = 20)
+
+print(light_manhattan_WL2)
+
+# Save plot
+ggsave("light_interaction_WL2_2023.png", light_manhattan_WL2, width = 12, height = 6, dpi = 300)
+```
+
+```{r}
+light_interaction_manhattan = light_manhattan_UCD / light_manhattan_WL2
+```
+
+Top 20 from both sites
+
+```{r}
+top20_UCD = plot_data |>
+slice_min(calibrated.pvalue, n = 20)
+
+top20_WL2 = plot_data_2023 |>
+slice_min(calibrated.pvalue, n = 20)
 ```
