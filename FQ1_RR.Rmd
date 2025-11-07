@@ -29,7 +29,6 @@ library(lfmm)
 library(patchwork)
 library(RSpectra)
 load("pl_lt_t.lmer.RData")
-load("growth_light_time.lmer.RData")
 source("manhattan_plot.R")
 ```
 
@@ -41,14 +40,7 @@ pheno_2022 <- ranef(pl_lt_t.lmer)$pop %>%
          blup_light = `mean_light_ly_day2`) %>%
   mutate(model = "Y2022")
 
-pheno_2023 <- ranef(growth_light_time.lmer)$parent_pop %>%
-  as_tibble(rownames = "parent_pop", .name_repair = "unique") %>%
-  rename(blup_intercept = `(Intercept)...1`,
-         blup_light = `weekly_avg_SlrW2`) %>%
-  mutate(model = "Y2023")
-
 geno_22 <- read.delim("Data/merged_maf_common_UCD2022.tsv", header = TRUE)
-geno_23 <- read.delim("Data/merged_maf_common_WL2_2023.tsv", header = TRUE)
 ```
 
 ```{r}
