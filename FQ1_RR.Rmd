@@ -45,13 +45,6 @@ geno_22 <- read.delim("Data/merged_maf_common_UCD2022.tsv", header = TRUE)
 
 ```{r}
 Y <- as.matrix(geno_22[,-1])
-pc <- prcomp(Y)
-plot(pc$sdev[1:20]^2, xlab = 'PC', ylab = "Variance explained")
-points(2,pc$sdev[2]^2, type = "h", lwd = 3, col = "blue")
-```
-
-```{r}
-Y <- as.matrix(geno_22[,-1])
 Y <- t(Y)
 X <- matrix(scale(pheno_2022$blup_light), ncol = 1)
 rownames(X) <- pheno_2022$pop
@@ -70,15 +63,33 @@ mod.lfmm <- lfmm_ridge(Y = Y,
                  X = X, 
                  lfmm = mod.lfmm, 
                  calibrate = "gif")
-pvalues <- pv$calibrated.pvalue
+pvalues.calibrated <- pv$calibrated.pvalue[,1]
+pvalues.raw = pv$pvalue
 ```
 
 ```{r}
 #QQ plot
-qqplot(rexp(length(pvalues), rate = log(10)),
+qqplot(rexp(length(pvalues.calibrated), rate = log(10)),
        -log10(pvalues), xlab = "Expected quantile",
        pch = 19, cex = .4)
 abline(0,1)
+
+n = length(sort(pvalues.calibrated))
+df = tibble(observed = sort(-log10(pvalues.raw)),
+expected = sort(-log10(ppoints(n))),
+clower   = -log10(qbeta(p = (1 - 0.95) / 2, shape1 = 1:n, shape2 = n:1)),
+cupper   = -log10(qbeta(p = (1 + 0.95) / 2, shape1 = 1:n, shape2 = n:1))
+)
+
+df |>
+ggplot() +
+geom_ribbon(aes(x = expected, ymin = clower, ymax = cupper), alpha = 0.1) +
+geom_point(aes(expected, observed), shape = 1, size = 3) +
+geom_abline(intercept = 0, slope = 1, alpha = 0.5) +
+theme_bw() +
+labs(x = expression(paste("Expected -log"[10], plain(P))),
+y = expression(paste("Observed -log"[10], plain(P))))
+
 ```
 
 ```{r}
@@ -143,6 +154,17 @@ labs(x = "BLUP light", y = "Allele frequency")
 ## Now run it for the WL2 garden
 
 ```{r}
+load("growth_light_time.lmer.RData")
+pheno_2023 <- ranef(growth_light_time.lmer)$parent_pop %>%
+  as_tibble(rownames = "parent_pop", .name_repair = "unique") %>%
+  rename(blup_intercept = `(Intercept)...1`,
+         blup_light = `weekly_avg_SlrW2`) %>%
+  mutate(model = "Y2023")
+
+geno_23 <- read.delim("Data/merged_maf_common_WL2_2023.tsv", header = TRUE)
+```
+
+```{r}
 Y_2023 <- as.matrix(geno_23[,-1])
 Y_2023 <- t(Y_2023)
 X_2023 <- matrix(scale(pheno_2023$blup_light), ncol = 1)
@@ -162,7 +184,25 @@ pv_2023 <- lfmm_test(Y = Y_2023,
                  X = X_2023, 
                  lfmm = mod.lfmm, 
                  calibrate = "gif")
-pvalues_2023 <- pv_2023$calibrated.pvalue
+
+pvalues_2023.calibrated <- pv$calibrated.pvalue[,1]
+pvalues_2023.raw = pv$pvalue[,1]
+
+n = length(sort(pvalues_2023.raw))
+df = tibble(observed = sort(-log10(pvalues_2023.raw)),
+expected = sort(-log10(ppoints(n))),
+clower   = -log10(qbeta(p = (1 - 0.95) / 2, shape1 = 1:n, shape2 = n:1)),
+cupper   = -log10(qbeta(p = (1 + 0.95) / 2, shape1 = 1:n, shape2 = n:1))
+)
+
+df |>
+ggplot() +
+geom_ribbon(aes(x = expected, ymin = clower, ymax = cupper), alpha = 0.1) +
+geom_point(aes(expected, observed), shape = 1, size = 3) +
+geom_abline(intercept = 0, slope = 1, alpha = 0.5) +
+theme_bw() +
+labs(x = expression(paste("Expected -log"[10], plain(P))),
+y = expression(paste("Observed -log"[10], plain(P))))
 ```
 
 ```{r}
@@ -195,8 +235,89 @@ Top 20 from both sites
 
 ```{r}
 top20_UCD = plot_data |>
-slice_min(calibrated.pvalue, n = 20)
+slice_min(calibrated.pvalue, n = 20) |>
+select(seqid = chr, bp, p_val, calibrated.pvalue, p.bonf)
+write_tsv(top20_UCD, "top20_UCD_loc.tsv")
 
 top20_WL2 = plot_data_2023 |>
-slice_min(calibrated.pvalue, n = 20)
+slice_min(calibrated.pvalue, n = 20) |>
+select(seqid = chr, bp, p_val, calibrated.pvalue, p.bonf)
+write_tsv(top20_WL2, "top20_WL2_loc.tsv")
+```
+
+Now join that with the genes data and extract genes in a certain window.
+
+```{r}
+genes = read_tsv("Data/gene_description.tsv")
+window_size = 10000
+```
+
+Now run the code to find nearby genes for UCD 2022
+
+```{r}
+genes_near_snps_UCD = top20_UCD |>
+  left_join(genes, by = "seqid", relationship = "many-to-many") |>
+  mutate(
+    # Calculate distances
+    dist_to_start = bp - start,
+    dist_to_end = bp - end,
+    
+    # Check if SNP is within gene body
+    in_gene = bp >= start & bp <= end,
+    
+    # Check if SNP is within window (upstream or downstream)
+    in_window = (bp >= (start - window_size) & bp <= (end + window_size))
+  ) |>
+  filter(in_window) |>
+  mutate(
+    # Categorize position
+    position = case_when(
+      in_gene ~ "in_gene",
+      bp < start ~ "upstream",
+      bp > end ~ "downstream"
+    ),
+    distance = case_when(
+      in_gene ~ 0,
+      bp < start ~ start - bp,
+      bp > end ~ bp - end
+    )
+  ) |>
+  arrange(seqid, bp, distance)
+
+write_tsv(genes_near_snps_UCD, "../UCD_2022_genes.tsv")
+```
+
+Now run the code to find nearby genes for WL2 2023
+
+```{r}
+genes_near_snps_WL2 = top20_WL2 |>
+  left_join(genes, by = "seqid", relationship = "many-to-many") |>
+  mutate(
+    # Calculate distances
+    dist_to_start = bp - start,
+    dist_to_end = bp - end,
+    
+    # Check if SNP is within gene body
+    in_gene = bp >= start & bp <= end,
+    
+    # Check if SNP is within window (upstream or downstream)
+    in_window = (bp >= (start - window_size) & bp <= (end + window_size))
+  ) |>
+  filter(in_window) |>
+  mutate(
+    # Categorize position
+    position = case_when(
+      in_gene ~ "in_gene",
+      bp < start ~ "upstream",
+      bp > end ~ "downstream"
+    ),
+    distance = case_when(
+      in_gene ~ 0,
+      bp < start ~ start - bp,
+      bp > end ~ bp - end
+    )
+  ) |>
+  arrange(seqid, bp, distance)
+
+write_tsv(genes_near_snps_WL2, "../WL2_2023_genes.tsv")
 ```
