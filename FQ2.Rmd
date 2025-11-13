@@ -136,7 +136,28 @@ ggsave("light_interaction23.png", manhattan_23, width = 12, height = 6, dpi = 30
 
 ```{r fig.width=14, fig.height=5}
 library(cowplot)
-plot_grid(manhattan_22, manhattan_23, ncol = 2, labels = c("2022", "2023"), rel_widths = c(1, 1))
+manhattan_tot <- plot_grid(manhattan_22, manhattan_23, ncol = 2, labels = c("2022", "2023"), rel_widths = c(1, 1))
 
 ```
 
+```{r}
+geno_table = Y
+colnames(geno_table) = geno_23[, 1]
+
+freq_plot_data = as.data.frame(X) |>
+rownames_to_column(var = "Population") |>
+mutate(loci1 = as.numeric(geno_table[, "Chr2:18026903"]),
+loci2 = as.numeric(geno_table[, "Chr11:6546598"]),
+loci3 = as.numeric(geno_table[, "Chr13:4965604"])) |>
+pivot_longer(cols = loci1:loci3, names_to = "loci", values_to = "frequency")
+
+freq_plot_data |>
+ggplot(aes(x = blup_light, y = frequency, label = Population)) +
+geom_point(size = 3) +
+geom_smooth(method = "lm", colour = "red") +
+geom_text_repel(size = 6) +
+facet_wrap(~loci, nrow = 1, scales = "free_y") +
+theme_minimal()+
+labs(x = "BLUP light", y = "Allele frequency")
+
+```
