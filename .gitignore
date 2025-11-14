@@ -1,5 +1,6 @@
 .DS_Store
 Data/.RData
 Data/.Rhistory
-*.Rdata
-*.png
+.Rdata
+.png
+.Rdata*
