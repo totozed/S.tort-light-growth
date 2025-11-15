@@ -2,5 +2,5 @@
 Data/.RData
 Data/.Rhistory
 .Rdata
-.png
+*.png
 .Rdata*

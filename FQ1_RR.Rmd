@@ -69,10 +69,10 @@ pvalues.raw = pv$pvalue
 
 ```{r}
 #QQ plot
-qqplot(rexp(length(pvalues.calibrated), rate = log(10)),
-       -log10(pvalues), xlab = "Expected quantile",
-       pch = 19, cex = .4)
-abline(0,1)
+#qqplot(rexp(length(pvalues.calibrated), rate = log(10)),
+#       -log10(pvalues), xlab = "Expected quantile",
+#       pch = 19, cex = .4)
+#abline(0,1)
 
 n = length(sort(pvalues.calibrated))
 df = tibble(observed = sort(-log10(pvalues.raw)),
@@ -90,15 +90,6 @@ theme_bw() +
 labs(x = expression(paste("Expected -log"[10], plain(P))),
 y = expression(paste("Observed -log"[10], plain(P))))
 
-```
-
-```{r}
- ## Manhattan plot
- plot(-log10(pvalues), 
-      pch = 19, 
-      cex = .2, 
-      xlab = "SNP", ylab = "-Log P",
-      col = "grey")
 ```
 
 Create a data frame for plotting the manhattan plot.
@@ -123,7 +114,7 @@ light_manhattan_UCD = plot_manhattan(plot_data,
 print(light_manhattan_UCD)
 
 # Save plot
-ggsave("light_interaction_UCD.png", light_manhattan_UCD, width = 12, height = 6, dpi = 300)
+ggsave("../light_interaction_UCD.png", light_manhattan_UCD, width = 12, height = 6, dpi = 300)
 ```
 
 
@@ -135,12 +126,12 @@ colnames(geno_table) = geno_22[, 1]
 
 freq_plot_data = as.data.frame(X) |>
 rownames_to_column(var = "Population") |>
-mutate(loci1 = as.numeric(geno_table[, "Chr6:20652277"]),
-loci2 = as.numeric(geno_table[, "Chr4:5383224"]),
-loci3 = as.numeric(geno_table[, "Chr5:14295930"])) |>
-pivot_longer(cols = loci1:loci3, names_to = "loci", values_to = "frequency")
+mutate(Chr6 = as.numeric(geno_table[, "Chr6:20652277"]),
+Chr4 = as.numeric(geno_table[, "Chr4:5383224"]),
+Chr5 = as.numeric(geno_table[, "Chr5:14295930"])) |>
+pivot_longer(cols = Chr6:Chr5, names_to = "loci", values_to = "frequency")
 
-freq_plot_data |>
+p1 = freq_plot_data |>
 ggplot(aes(x = blup_light, y = frequency, label = Population)) +
 geom_point(size = 3) +
 geom_smooth(method = "lm", colour = "red") +
@@ -149,6 +140,7 @@ facet_wrap(~loci, nrow = 1, scales = "free_y") +
 theme_minimal()+
 labs(x = "BLUP light", y = "Allele frequency")
 
+ggsave("../freq_plot.png", p1, width = 12, height = 6)
 ```
 
 ## Now run it for the WL2 garden
