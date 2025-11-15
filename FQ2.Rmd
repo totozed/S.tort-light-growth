@@ -20,11 +20,14 @@ library(RSpectra)
 load("pl_lt_t.lmer.RData")
 load("growth_light_time.lmer.RData")
 source("manhattan_plot.R")
+#file_path <- file.choose()
+#rmarkdown::render(file_path)
 ```
 
-*manhattan plot for 2022*
+manhattan plot for 2022
+
 ```{r}
-pheno_2022 <- ranef(pl_lt_t.lmer)$pop %>%
+pheno_22 <- ranef(pl_lt_t.lmer)$pop %>%
   as_tibble(rownames = "pop",.name_repair = "unique")%>%
   rename(blup_intercept = `(Intercept)...1`,
          blup_light = `mean_light_ly_day2`) %>%
@@ -34,8 +37,8 @@ geno_22 <- read.delim("Data/merged_maf_common_UCD2022.tsv", header = TRUE)
 
 Y <- as.matrix(geno_22[,-1])
 Y <- t(Y)
-X <- matrix(scale(pheno_2022$blup_light), ncol = 1)
-rownames(X) <- pheno_2022$pop
+X <- matrix(scale(pheno_22$blup_light), ncol = 1)
+rownames(X) <- pheno_22$pop
 colnames(X) <- "blup_light"
 common <- intersect(rownames(X), rownames(Y))
 Y <- Y[common,]
@@ -66,9 +69,10 @@ manhattan_22 = plot_manhattan(plot_data,
                         highlight_top_n = 20)
 ```
 
+import X and Y data in WL2_2023
 
 ```{r}
-pheno_2023 <- ranef(growth_light_time.lmer)$parent_pop %>%
+pheno_23 <- ranef(growth_light_time.lmer)$parent_pop %>%
   as_tibble(rownames = "parent_pop", .name_repair = "unique") %>%
   rename(blup_intercept = `(Intercept)...1`,
          blup_light = `weekly_avg_SlrW2`) %>%
@@ -77,33 +81,37 @@ pheno_2023 <- ranef(growth_light_time.lmer)$parent_pop %>%
 geno_23 <- read.delim("Data/merged_maf_common_WL2_2023.tsv", header = TRUE)
 ```
 
-```{r}
-Y <- as.matrix(geno_23[,-1])
-pc <- prcomp(Y)
-plot(pc$sdev[1:20]^2, xlab = 'PC', ylab = "Variance explained")
-points(2,pc$sdev[2]^2, type = "h", lwd = 3, col = "blue")
-```
+Perform PCA and find the number of latent factors
 
 ```{r}
-Y <- as.matrix(geno_23[,-1])
-Y <- t(Y)
-X <- matrix(scale(pheno_2023$blup_light), ncol = 1)
-rownames(X) <- pheno_2023$parent_pop
-colnames(X) <- "blup_light"
-common <- intersect(rownames(X), rownames(Y))
-Y <- Y[common,]
-X <- X[common, , drop = FALSE]
-mod.lfmm <- lfmm_ridge(Y = Y, 
-                        X = X, 
+Y_23 <- as.matrix(geno_23[,-1])
+pc_23 <- prcomp(Y_23)
+plot(pc_23$sdev[1:20]^2, xlab = 'PC', ylab = "Variance explained")
+points(2,pc_23$sdev[2]^2, type = "h", lwd = 3, col = "blue")
+```
+
+Fit the lfmm model and estimate the p value
+
+```{r}
+#process the data
+Y_23 <- as.matrix(geno_23[,-1])
+Y_23 <- t(Y_23)
+X_23 <- matrix(scale(pheno_23$blup_light), ncol = 1)
+rownames(X_23) <- pheno_23$parent_pop
+colnames(X_23) <- "blup_light"
+common <- intersect(rownames(X_23), rownames(Y_23))
+Y_23 <- Y_23[common,]
+X_23 <- X_23[common, , drop = FALSE]
+
+#fit the model
+mod.lfmm_23 <- lfmm_ridge(Y = Y_23, 
+                        X = X_23, 
                         K = 2)
-```
-
-```{r}
- pv <- lfmm_test(Y = Y, 
-                 X = X, 
-                 lfmm = mod.lfmm, 
+pv_23 <- lfmm_test(Y = Y_23, 
+                 X = X_23, 
+                 lfmm = mod.lfmm_23, 
                  calibrate = "gif")
-pvalues <- pv$calibrated.pvalue
+pvalues_23 <- pv_23$calibrated.pvalue
 
 #QQ plot
 qqplot(rexp(length(pvalues), rate = log(10)),
@@ -112,15 +120,17 @@ qqplot(rexp(length(pvalues), rate = log(10)),
 abline(0,1)
 ```
 
+Create a data frame for plotting the manhattan plot.
+
 ```{r}
-plot_data = tibble(loci = geno_23[,1], p_val = pv$pvalue[,1], calibrated.pvalue = pv$calibrated.pvalue[,1]) |>
+plot_data_23 = tibble(loci = geno_23[,1], p_val = pv_23$pvalue[,1], calibrated.pvalue = pv_23$calibrated.pvalue[,1]) |>
 separate_wider_delim(loci, delim = ":", names = c("chr", "bp")) |>
 filter(str_detect(chr, "Chr")) |>
 mutate(p.bonf = p.adjust(p_val, method = "bonferroni"),
 bp = as.numeric(bp))
 
 
-manhattan_23 = plot_manhattan(plot_data,
+manhattan_23 = plot_manhattan(plot_data_23,
                         chr_col = "chr",
                         pos_col = "bp",
                         value_col = "calibrated.pvalue",
@@ -134,24 +144,41 @@ print(manhattan_23)
 ggsave("light_interaction23.png", manhattan_23, width = 12, height = 6, dpi = 300)
 ```
 
+Manhattan plot side by side
+
 ```{r fig.width=14, fig.height=5}
 library(cowplot)
 manhattan_tot <- plot_grid(manhattan_22, manhattan_23, ncol = 2, labels = c("2022", "2023"), rel_widths = c(1, 1))
-
 ```
 
-```{r}
-geno_table = Y
-colnames(geno_table) = geno_23[, 1]
+list out top 20 SNPs for both the gardens
 
-freq_plot_data = as.data.frame(X) |>
+```{r}
+top20_UCD = plot_data |>
+slice_min(calibrated.pvalue, n = 20) |>
+select(seqid = chr, bp, p_val, calibrated.pvalue, p.bonf)
+write_tsv(top20_UCD, "top20_UCD_loc.tsv")
+
+top20_WL2 = plot_data_23 |>
+slice_min(calibrated.pvalue, n = 20) |>
+select(seqid = chr, bp, p_val, calibrated.pvalue, p.bonf)
+write_tsv(top20_WL2, "top20_WL2_loc.tsv")
+```
+
+Plot the correlation of allele frequency and the blups
+
+```{r}
+geno_table_23 = Y_23
+colnames(geno_table_23) = geno_23[, 1]
+
+freq_plot_data_23 = as.data.frame(X_23) |>
 rownames_to_column(var = "Population") |>
-mutate(loci1 = as.numeric(geno_table[, "Chr2:18026903"]),
-loci2 = as.numeric(geno_table[, "Chr11:6546598"]),
-loci3 = as.numeric(geno_table[, "Chr13:4965604"])) |>
+mutate(loci1 = as.numeric(geno_table_23[, "Chr2:18026903"]),
+loci2 = as.numeric(geno_table_23[, "Chr11:6546598"]),
+loci3 = as.numeric(geno_table_23[, "Chr13:4965604"])) |>
 pivot_longer(cols = loci1:loci3, names_to = "loci", values_to = "frequency")
 
-freq_plot_data |>
+freq_plot_data_23 |>
 ggplot(aes(x = blup_light, y = frequency, label = Population)) +
 geom_point(size = 3) +
 geom_smooth(method = "lm", colour = "red") +
@@ -159,5 +186,163 @@ geom_text_repel(size = 6) +
 facet_wrap(~loci, nrow = 1, scales = "free_y") +
 theme_minimal()+
 labs(x = "BLUP light", y = "Allele frequency")
+```
+
+upload the gene table and find the nearby genes
+
+```{r}
+genes = read_tsv("Data/gene_description.tsv")
+window_size = 100000
+```
+
+```{r}
+genes_near_snps_UCD = top20_UCD |>
+  left_join(genes, by = "seqid", relationship = "many-to-many") |>
+  mutate(
+    # Calculate distances
+    dist_to_start = bp - start,
+    dist_to_end = bp - end,
+    
+    # Check if SNP is within gene body
+    in_gene = bp >= start & bp <= end,
+    
+    # Check if SNP is within window (upstream or downstream)
+    in_window = (bp >= (start - window_size) & bp <= (end + window_size))
+  ) |>
+  filter(in_window) |>
+  mutate(
+    # Categorize position
+    position = case_when(
+      in_gene ~ "in_gene",
+      bp < start ~ "upstream",
+      bp > end ~ "downstream"
+    ),
+    distance = case_when(
+      in_gene ~ 0,
+      bp < start ~ start - bp,
+      bp > end ~ bp - end
+    )
+  ) |>
+  arrange(seqid, bp, distance)
+
+write_tsv(genes_near_snps_UCD, "UCD_2022_genes.tsv")
+genes_near_snps_UCD
+```
+
+```{r}
+genes_near_snps_WL2 = top20_WL2 |>
+  left_join(genes, by = "seqid", relationship = "many-to-many") |>
+  mutate(
+    # Calculate distances
+    dist_to_start = bp - start,
+    dist_to_end = bp - end,
+    
+    # Check if SNP is within gene body
+    in_gene = bp >= start & bp <= end,
+    
+    # Check if SNP is within window (upstream or downstream)
+    in_window = (bp >= (start - window_size) & bp <= (end + window_size))
+  ) |>
+  filter(in_window) |>
+  mutate(
+    # Categorize position
+    position = case_when(
+      in_gene ~ "in_gene",
+      bp < start ~ "upstream",
+      bp > end ~ "downstream"
+    ),
+    distance = case_when(
+      in_gene ~ 0,
+      bp < start ~ start - bp,
+      bp > end ~ bp - end
+    )
+  ) |>
+  arrange(seqid, bp, distance)
+
+write_tsv(genes_near_snps_WL2, "WL2_2023_genes.tsv")
+genes_near_snps_WL2
+```
+
+
+
+```{r}
+prioritized_genes <- genes_near_snps_UCD %>%
+  group_by(gene_id, description, seqid) %>%
+  summarise(
+    n_snps = n(),
+    min_distance = min(distance),
+    any_in_gene = any(position == "in_gene"),
+    any_promoter = any(distance <= 1000 & position=="upstream"),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    priority_score =
+      3 * any_in_gene +
+      2 * any_promoter +
+      1 * (min_distance <= 3000) +
+      n_snps
+  ) %>%
+  arrange(desc(priority_score), min_distance)
+
+prioritized_genes
+```
+
+```{r}
+plot_locus_zoom <- function(snp_chr, snp_bp, snp_table, gene_table, window = 50000) {
+  
+  region_start <- snp_bp - window
+  region_end   <- snp_bp + window
+  
+  # subset SNPs
+  snps_region <- snp_table %>%
+    filter(chr == snp_chr, bp >= region_start, bp <= region_end)
+  
+  # subset genes
+  genes_region <- gene_table %>%
+    filter(seqid == snp_chr, start <= region_end, end >= region_start)
+  
+  # panel 1: SNP p-values
+  p1 <- ggplot(snps_region, aes(x = bp, y = -log10(calibrated.pvalue))) +
+    geom_point(color = "black") +
+    geom_point(data = snps_region %>% filter(bp == snp_bp),
+               aes(x = bp, y = -log10(calibrated.pvalue)),
+               color = "red", size = 3) +
+    theme_bw() +
+    labs(title = paste0("LocusZoom: ", snp_chr, ":", snp_bp),
+         y = "-log10(p)", x = "")
+  
+  # panel 2: gene structure
+  p2 <- ggplot() +
+    geom_segment(
+        data = genes_region,
+        aes(x = start, xend = end, y = 0, yend = 0),
+        size = 5, color = "skyblue"
+    ) +
+    geom_point(
+        aes(x = snp_bp, y = 0),
+        color = "red", size = 4
+    ) +
+    labs(y = "Genes", x = "Position (bp)") +
+    theme_bw() +
+    theme(
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()
+    )
+  
+  list(p1 = p1, p2 = p2)
+}
+
+zoom <- plot_locus_zoom(
+  snp_chr = "Chr1",
+  snp_bp = 102763,
+  snp_table = plot_data,
+  gene_table = genes,
+  window = 50000
+)
+
+zoom$p1   # SNP plot
+zoom$p2   # Gene track
+
 
 ```
+
