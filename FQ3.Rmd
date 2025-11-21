@@ -1,0 +1,440 @@
+---
+title: "FQ4"
+output: pdf_document
+date: "2025-11-20"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(lme4) 
+library(tibble)
+library(dplyr)
+library(tidyverse)
+library(ggthemes)
+library(ggrepel)
+library(lfmm)
+library(RSpectra)
+#install.packages("fuzzyjoin")
+library(fuzzyjoin)
+load("pl_lt_t.lmer.RData")
+load("growth_light_time.lmer.RData")
+source("manhattan_plot.R")
+#file_path <- file.choose()
+#rmarkdown::render(file_path)
+```
+
+manhattan plot for 2022
+
+```{r}
+pheno_22 <- ranef(pl_lt_t.lmer)$pop %>%
+  as_tibble(rownames = "pop",.name_repair = "unique")%>%
+  rename(blup_intercept = `(Intercept)...1`,
+         blup_light = `mean_light_ly_day2`) %>%
+  mutate(model = "Y2022")
+
+geno_22 <- read.delim("Data/merged_maf_common_UCD2022.tsv", header = TRUE)
+
+Y <- as.matrix(geno_22[,-1])
+Y <- t(Y)
+X <- matrix(scale(pheno_22$blup_light), ncol = 1)
+rownames(X) <- pheno_22$pop
+colnames(X) <- "blup_light"
+common <- intersect(rownames(X), rownames(Y))
+Y <- Y[common,]
+X <- X[common, , drop = FALSE]
+mod.lfmm <- lfmm_ridge(Y = Y, 
+                        X = X, 
+                        K = 2)
+
+ pv <- lfmm_test(Y = Y, 
+                 X = X, 
+                 lfmm = mod.lfmm, 
+                 calibrate = "gif")
+pvalues <- pv$calibrated.pvalue
+
+plot_data = tibble(loci = geno_22[,1], p_val = pv$pvalue[,1], calibrated.pvalue = pv$calibrated.pvalue[,1]) |>
+separate_wider_delim(loci, delim = ":", names = c("chr", "bp")) |>
+filter(str_detect(chr, "Chr")) |>
+mutate(p.bonf = p.adjust(p_val, method = "bonferroni"),
+bp = as.numeric(bp))
+
+
+manhattan_22 = plot_manhattan(plot_data,
+                        chr_col = "chr",
+                        pos_col = "bp",
+                        value_col = "calibrated.pvalue",
+                        transform = "neglog10",
+                        title = "Light association",
+                        highlight_top_n = 20)
+```
+
+manhattan plot for WL2 2023
+
+```{r}
+#import the X and Y
+pheno_23 <- ranef(growth_light_time.lmer)$parent_pop %>%
+  as_tibble(rownames = "parent_pop", .name_repair = "unique") %>%
+  rename(blup_intercept = `(Intercept)...1`,
+         blup_light = `weekly_avg_SlrW2`) %>%
+  mutate(model = "Y2023")
+
+geno_23 <- read.delim("Data/merged_maf_common_WL2_2023.tsv", header = TRUE)
+
+#process the data
+Y_23 <- as.matrix(geno_23[,-1])
+Y_23 <- t(Y_23)
+X_23 <- matrix(scale(pheno_23$blup_light), ncol = 1)
+rownames(X_23) <- pheno_23$parent_pop
+colnames(X_23) <- "blup_light"
+common <- intersect(rownames(X_23), rownames(Y_23))
+Y_23 <- Y_23[common,]
+X_23 <- X_23[common, , drop = FALSE]
+
+#fit the model
+mod.lfmm_23 <- lfmm_ridge(Y = Y_23, 
+                        X = X_23, 
+                        K = 2)
+pv_23 <- lfmm_test(Y = Y_23, 
+                 X = X_23, 
+                 lfmm = mod.lfmm_23, 
+                 calibrate = "gif")
+pvalues_23 <- pv_23$calibrated.pvalue
+
+#make the manhattan plot
+plot_data_23 = tibble(loci = geno_23[,1], p_val = pv_23$pvalue[,1], calibrated.pvalue = pv_23$calibrated.pvalue[,1]) |>
+separate_wider_delim(loci, delim = ":", names = c("chr", "bp")) |>
+filter(str_detect(chr, "Chr")) |>
+mutate(p.bonf = p.adjust(p_val, method = "bonferroni"),
+bp = as.numeric(bp))
+
+
+manhattan_23 = plot_manhattan(plot_data_23,
+                        chr_col = "chr",
+                        pos_col = "bp",
+                        value_col = "calibrated.pvalue",
+                        transform = "neglog10",
+                        title = "Light association",
+                        highlight_top_n = 20)
+
+# Save plot
+ggsave("light_interaction23.png", manhattan_23, width = 12, height = 6, dpi = 300)
+```
+
+
+```{r}
+prep_manhattan_data <- function(data,
+                                chr_col = "chr",
+                                pos_col = "bp",
+                                value_col = "calibrated.pvalue",
+                                transform = "neglog10") {
+  plot_data <- data %>%
+    rename(chr = !!sym(chr_col),
+           pos = !!sym(pos_col),
+           value = !!sym(value_col))
+  
+  if (transform == "log10") {
+    plot_data <- plot_data %>% mutate(plot_value = log10(value))
+  } else if (transform == "neglog10") {
+    plot_data <- plot_data %>% mutate(plot_value = -log10(value))
+  } else {
+    plot_data <- plot_data %>% mutate(plot_value = value)
+  }
+  
+  plot_data <- plot_data %>%
+    filter(!is.na(plot_value), !is.infinite(plot_value)) %>%
+    mutate(chr_num = as.numeric(gsub("\\D", "", chr))) %>%
+    arrange(chr_num, pos)
+  
+  chr_lengths <- plot_data %>%
+    group_by(chr, chr_num) %>%
+    summarise(chr_len = max(pos), .groups = "drop") %>%
+    arrange(chr_num) %>%
+    mutate(tot = cumsum(as.numeric(chr_len)) - chr_len)
+  
+  plot_data <- plot_data %>%
+    left_join(chr_lengths %>% select(chr, tot), by = "chr") %>%
+    mutate(BPcum = pos + tot)
+  
+  axis_df <- plot_data %>%
+    group_by(chr, chr_num) %>%
+    summarize(center = (max(BPcum) + min(BPcum)) / 2, .groups = "drop") %>%
+    arrange(chr_num)
+  
+  list(plot_data = plot_data, axis_df = axis_df)
+}
+
+prep22 <- prep_manhattan_data(plot_data, 
+                              chr_col = "chr",
+                              pos_col = "bp",
+                              value_col = "calibrated.pvalue",
+                              transform = "neglog10")
+
+prep23 <- prep_manhattan_data(plot_data_23,
+                              chr_col = "chr",
+                              pos_col = "bp",
+                              value_col = "calibrated.pvalue",
+                              transform = "neglog10")
+
+overlay_df <- bind_rows(
+  prep22$plot_data %>% mutate(year = "2022"),
+  prep23$plot_data %>% mutate(year = "2023")
+)
+
+overlay_plot <- ggplot(overlay_df,
+                       aes(x = BPcum, y = plot_value)) +
+  geom_point(aes(color = year),
+             alpha = 0.5, size = 1) +
+  scale_color_manual(values = c("2022" = "#56B4E9",
+                                "2023" = "#E69F00")) +
+  scale_x_continuous(breaks = prep22$axis_df$center,
+                     labels = prep22$axis_df$chr,
+                     expand = c(0.01, 0.01)) +
+  labs(title = "Light association (2022 vs 2023 overlay)",
+       x = "Chromosome",
+       y = "-log10(calibrated p-value)") +
+  theme_minimal() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.text.x = element_text(angle = 0, size = 10)
+  )
+
+print(overlay_plot)
+```
+
+```{r}
+top1_UCD = plot_data |>
+slice_min(calibrated.pvalue, prop=0.01) |>
+select(seqid = chr, bp, p_val, calibrated.pvalue, p.bonf)
+write_tsv(top1_UCD, "top1_UCD_loc.tsv")
+
+top1_WL2 = plot_data_23 |>
+slice_min(calibrated.pvalue, prop=0.01) |>
+select(seqid = chr, bp, p_val, calibrated.pvalue, p.bonf)
+write_tsv(top1_WL2, "top1_WL2_loc.tsv")
+```
+
+```{r}
+w <- 1e5 / 2
+
+reg22 <- top1_UCD %>%
+  transmute(seqid, bp22=bp,start = bp - w, end = bp + w, p22 = calibrated.pvalue)
+
+reg23 <- top1_WL2 %>%
+  transmute(seqid, bp23=bp,start = bp - w, end = bp + w, p23 = calibrated.pvalue)
+
+overlap_list <- list()
+
+chroms <- intersect(reg22$seqid, reg23$seqid)
+
+for (chr_i in chroms) {
+  
+  d1 <- reg22 %>% filter(seqid == chr_i)
+  d2 <- reg23 %>% filter(seqid == chr_i)
+  
+  if (nrow(d1) > 0 & nrow(d2) > 0) {
+    tmp <- fuzzyjoin::interval_inner_join(
+      d1, d2,
+      by = c("start", "end")
+    ) %>%
+      mutate(
+        chr = chr_i,
+        overlap_start = pmax(start.x, start.y),
+        overlap_end   = pmin(end.x, end.y),
+        width         = overlap_end - overlap_start
+      ) %>%
+      filter(width > 0)
+    
+    overlap_list[[chr_i]] <- tmp
+  }
+}
+
+overlap <- bind_rows(overlap_list)
+overlap_clean <- overlap %>%
+  rename(
+    chr      = chr,
+    start22  = start.x,
+    end22    = end.x,
+    p22      = p22, 
+    start23  = start.y,
+    end23    = end.y,
+    p23      = p23
+  )
+head(overlap)
+```
+
+
+```{r}
+df22 <- plot_data %>% mutate(logp = -log10(calibrated.pvalue))
+sig22 <- df22 %>% slice_max(logp, prop = 0.01)
+df23 <- plot_data_23 %>% mutate(logp = -log10(calibrated.pvalue))
+sig23 <- df23 %>% slice_max(logp, prop = 0.01)
+
+#combine SNPs within 50kb to make a peak region
+merge_peaks <- function(df, max_gap = 50000){
+  df %>%
+    arrange(chr, bp) %>%
+    group_by(chr) %>%
+    mutate(gap = bp - lag(bp, default = first(bp)),
+           new_region = gap > max_gap,
+           region_id = cumsum(new_region)) %>%
+    group_by(chr, region_id) %>%
+    summarise(
+      region_start = min(bp),
+      region_end   = max(bp),
+      peak_snp     = bp[which.max(logp)],
+      peak_logp    = max(logp),
+      .groups = "drop"
+    )
+}
+
+peaks22 <- merge_peaks(sig22)
+peaks23 <- merge_peaks(sig23)
+
+peak_overlap <- interval_inner_join(
+  peaks22 %>% rename(start = region_start, end = region_end),
+  peaks23 %>% rename(start = region_start, end = region_end),
+  by = c("start", "end")
+) %>%
+  mutate(
+    overlap_start = pmax(start.x, start.y),
+    overlap_end   = pmin(end.x, end.y),
+    width = overlap_end - overlap_start
+  ) %>%
+  filter(width > 0)
+
+peak_overlap
+```
+
+upload the gene table and find the nearby genes
+
+```{r}
+genes = read_tsv("Data/gene_description.tsv")
+window_size = 100000
+```
+```{r}
+top20_UCD = plot_data |>
+slice_min(calibrated.pvalue, n = 20) |>
+select(seqid = chr, bp, p_val, calibrated.pvalue, p.bonf)
+write_tsv(top20_UCD, "top20_UCD_loc.tsv")
+
+top20_WL2 = plot_data_23 |>
+slice_min(calibrated.pvalue, n = 20) |>
+select(seqid = chr, bp, p_val, calibrated.pvalue, p.bonf)
+write_tsv(top20_WL2, "top20_WL2_loc.tsv")
+```
+
+```{r}
+genes_near_snps_UCD = top20_UCD |>
+  left_join(genes, by = "seqid", relationship = "many-to-many") |>
+  mutate(
+    # Calculate distances
+    dist_to_start = bp - start,
+    dist_to_end = bp - end,
+    
+    # Check if SNP is within gene body
+    in_gene = bp >= start & bp <= end,
+    
+    # Check if SNP is within window (upstream or downstream)
+    in_window = (bp >= (start - window_size) & bp <= (end + window_size))
+  ) |>
+  filter(in_window) |>
+  mutate(
+    # Categorize position
+    position = case_when(
+      in_gene ~ "in_gene",
+      bp < start ~ "upstream",
+      bp > end ~ "downstream"
+    ),
+    distance = case_when(
+      in_gene ~ 0,
+      bp < start ~ start - bp,
+      bp > end ~ bp - end
+    )
+  ) |>
+  arrange(seqid, bp, distance)
+
+#write_tsv(genes_near_snps_UCD, "UCD_2022_genes.tsv")
+genes_near_snps_UCD
+```
+
+```{r}
+genes_near_snps_WL2 = top20_WL2 |>
+  left_join(genes, by = "seqid", relationship = "many-to-many") |>
+  mutate(
+    # Calculate distances
+    dist_to_start = bp - start,
+    dist_to_end = bp - end,
+    
+    # Check if SNP is within gene body
+    in_gene = bp >= start & bp <= end,
+    
+    # Check if SNP is within window (upstream or downstream)
+    in_window = (bp >= (start - window_size) & bp <= (end + window_size))
+  ) |>
+  filter(in_window) |>
+  mutate(
+    # Categorize position
+    position = case_when(
+      in_gene ~ "in_gene",
+      bp < start ~ "upstream",
+      bp > end ~ "downstream"
+    ),
+    distance = case_when(
+      in_gene ~ 0,
+      bp < start ~ start - bp,
+      bp > end ~ bp - end
+    )
+  ) |>
+  arrange(seqid, bp, distance)
+
+#write_tsv(genes_near_snps_WL2, "WL2_2023_genes.tsv")
+genes_near_snps_WL2
+```
+
+```{r}
+prioritized_genes <- genes_near_snps_UCD %>%
+  group_by(gene_id, description, seqid) %>%
+  summarise(
+    n_snps = n(),
+    min_distance = min(distance),
+    any_in_gene = any(position == "in_gene"),
+    any_promoter = any(distance <= 1000 & position=="upstream"),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    priority_score =
+      3 * any_in_gene +
+      2 * any_promoter +
+      1 * (min_distance <= 3000) +
+      n_snps
+  ) %>%
+  arrange(desc(priority_score), min_distance)
+
+prioritized_genes
+```
+
+```{r}
+prioritized_genes <- genes_near_snps_WL2 %>%
+  group_by(gene_id, description, seqid) %>%
+  summarise(
+    n_snps = n(),
+    min_distance = min(distance),
+    any_in_gene = any(position == "in_gene"),
+    any_promoter = any(distance <= 1000 & position=="upstream"),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    priority_score =
+      3 * any_in_gene +
+      2 * any_promoter +
+      1 * (min_distance <= 3000) +
+      n_snps
+  ) %>%
+  arrange(desc(priority_score), min_distance)
+
+prioritized_genes
+```
+
