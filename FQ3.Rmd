@@ -206,12 +206,12 @@ print(overlay_plot)
 
 ```{r}
 top1_UCD = plot_data |>
-slice_min(calibrated.pvalue, prop=0.01) |>
+slice_min(calibrated.pvalue, prop=0.001) |>
 select(seqid = chr, bp, p_val, calibrated.pvalue, p.bonf)
 write_tsv(top1_UCD, "top1_UCD_loc.tsv")
 
 top1_WL2 = plot_data_23 |>
-slice_min(calibrated.pvalue, prop=0.01) |>
+slice_min(calibrated.pvalue, prop=0.001) |>
 select(seqid = chr, bp, p_val, calibrated.pvalue, p.bonf)
 write_tsv(top1_WL2, "top1_WL2_loc.tsv")
 ```
