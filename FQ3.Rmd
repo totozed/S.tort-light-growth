@@ -1,5 +1,5 @@
 ---
-title: "FQ4"
+title: "FQ3"
 output: pdf_document
 date: "2025-11-20"
 ---
@@ -436,5 +436,41 @@ prioritized_genes <- genes_near_snps_WL2 %>%
   arrange(desc(priority_score), min_distance)
 
 prioritized_genes
+```
+
+```{r}
+region_start <- 4618094
+region_end   <- 4718094
+
+# 2022 subset
+chr4_22 <- prep22$plot_data %>%
+  filter(chr == "Chr4",
+         pos >= region_start,
+         pos <= region_end) %>%
+  mutate(logp_signed = plot_value)   
+
+# 2023 subset
+chr4_23 <- prep23$plot_data %>%
+  filter(chr == "Chr4",
+         pos >= region_start,
+         pos <= region_end) %>%
+  mutate(logp_signed = -plot_value)  
+
+# merge
+mirror_df <- bind_rows(
+  chr4_22 %>% mutate(year = "2022"),
+  chr4_23 %>% mutate(year = "2023")
+)
+
+ggplot(mirror_df, aes(x = pos, y = logp_signed, color = year)) +
+  geom_point(size = 1.2, alpha = 0.7) +
+  geom_hline(yintercept = 0, color = "black") +
+  labs(
+    title = "Mirrored Manhattan Plot (Chr4: 4.62–4.72 Mb)",
+    x = "Position on Chr4",
+    y = "+/- -log10(p)"
+  ) +
+  scale_color_manual(values = c("2022" = "#56B4E9", "2023" = "#E69F00")) +
+  theme_bw()
 ```
 
