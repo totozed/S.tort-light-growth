@@ -7,8 +7,15 @@ date: "2025-11-20"
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
 ```{r}
+#install.packages("ISOweek")
+library(ISOweek)
 library(lme4) 
+library(lubridate)
+library(readxl)
+library(readr)
+library(janitor)
 library(tibble)
 library(dplyr)
 library(tidyverse)
@@ -472,5 +479,374 @@ ggplot(mirror_df, aes(x = pos, y = logp_signed, color = year)) +
   ) +
   scale_color_manual(values = c("2022" = "#56B4E9", "2023" = "#E69F00")) +
   theme_bw()
+```
+
+1.Create side-by-side plots of BLUP vs. allele frequency for the two closest significant SNPs from the UCD and WL2 gardens
+
+```{r}
+#find two closest significant SNPs around 4670000
+target_pos <- 4670000
+tol <- 30000  
+
+#UCD 2022
+ucd_target <- plot_data %>%
+  filter(chr == "Chr4",
+         bp >= target_pos - tol,
+         bp <= target_pos + tol) %>%
+  arrange(calibrated.pvalue) %>%    
+  slice(1)
+
+print(ucd_target)
+
+#WL2 2023
+wl2_target <- plot_data_23 %>%
+  filter(chr == "Chr4",
+         bp >= target_pos - tol,
+         bp <= target_pos + tol) %>%
+  arrange(calibrated.pvalue) %>%
+  slice(1)
+
+print(wl2_target)
+```
+
+```{r}
+geno_table_22 = Y
+colnames(geno_table_22)=geno_22[, 1]
+geno_table_23 = Y_23
+colnames(geno_table_23) = geno_23[, 1]
+
+freq_UCD = as.data.frame(X) %>%
+ rownames_to_column(var = "Population") |>
+mutate(UCD_SNP = as.numeric(geno_table_22[, "Chr4:4668094"]))
+freq_WL2 = as.data.frame(X_23) %>%
+ rownames_to_column(var = "Population") |>
+mutate(WL2_SNP = as.numeric(geno_table_23[, "Chr4:4682775"]))
+freq_plot_both <- bind_rows(freq_UCD, freq_WL2)%>%
+  pivot_longer(cols = UCD_SNP:WL2_SNP, names_to = "loci", values_to = "frequency")
+
+
+freq_plot_both |>
+ggplot(aes(x = blup_light, y = frequency, label = Population)) +
+geom_point(size = 3) +
+geom_smooth(method = "lm", colour = "red") +
+geom_text_repel(size = 6) +
+facet_wrap(~loci, nrow = 1, scales = "free_y") +
+theme_minimal()+
+labs(x = "BLUP light", y = "Allele frequency")
+```
+
+2. Plot the change in light intensity over time for both years.
+
+```{r}
+#weekly solar radiation for UCD garden in 2022-2023 year
+ucd_met <- read_csv("Data/UCD_met_data.csv")%>%clean_names()
+
+ucd_daily <- ucd_met %>%
+  mutate(
+    date = mdy(date),
+    year = year(date),
+    week = isoweek(date),
+    light=sol_rad_ly_day,
+    garden="UCD"
+  ) %>%
+  select(date, year, week, light,garden)
+```
+
+```{r}
+#weekly solar radiation for WL2 garden in 2023 year
+wl2_met <- read_csv("Data/IntBioHalfHourTable_clean.txt")%>%clean_names()
+
+wl2_daily <- wl2_met %>%
+  mutate(
+  timestamp = as.POSIXct(timestamp),
+  date = as.Date(timestamp),
+  week= isoweek(timestamp),
+  year = 2023
+  ) %>%
+  group_by(year,week,date) %>%
+  summarise(
+    n_records   = n(),  
+    total_J_m2  = sum(slr_w_avg, na.rm = TRUE) * 1800,
+    light    = total_J_m2 / 41840,
+    .groups = "drop"
+  )%>%
+  filter(n_records>=40)%>%
+  mutate(garden="WL2")
+
+
+wl2_weekly <- wl2_daily %>%
+  group_by(year, week) %>%
+  summarise(weekly_avg_SlrW = mean(light, na.rm = TRUE), .groups = "drop")%>%
+  mutate(iso_week  = paste0(year, "-W", sprintf("%02d", week)),
+    week = ISOweek2date(paste0(iso_week, "-1")) - days(1))
+
+
+#combine UCD and WL2
+daily_light <- bind_rows(ucd_daily, wl2_daily)%>%
+  select(-n_records, -total_J_m2)
+```
+
+```{r}
+daily_light %>%
+  ggplot(aes(x = date, y = light)) +
+  geom_line() +
+  facet_wrap(~ garden, nrow = 2, scales = "free_x") +
+  labs(x = "date", y = "Light (Ly/day)") +
+  theme_minimal()
+```
+
+3.Generate a side-by-side plot of slope vs. population, incorporating the time factors.
+
+UCD
+```{r}
+plant_2223 <- read.csv("C:/Users/Tobyz/Desktop/Toby在大学/Maloof Lab/S.tort-light-growth/Data/UCD_2022_23_size_data_combined.csv") %>%
+  clean_names() %>%
+  mutate(survey_date = as.Date(survey_date, format = "%m/%d/%Y"))
+#PID
+pl_gr <- plant_2223 %>%
+  unite("PID", pop:rep, sep = "_", remove = FALSE) %>%
+  mutate(survey_date = as.Date(survey_date))
+#filter out plants with negative growth < -5
+pl_gr_cleaned <- pl_gr
+
+repeat {
+  pl_gr_cleaned <- pl_gr_cleaned %>%
+    arrange(PID, survey_date) %>%
+    group_by(PID) %>%
+    mutate(growth = height - lag(height)) %>%
+    filter(is.na(growth) | growth >= -5) %>%
+    select(-growth) %>%
+    ungroup()
+
+  check <- pl_gr_cleaned %>%
+    arrange(PID, survey_date) %>%
+    group_by(PID) %>%
+    mutate(growth = height - lag(height)) %>%
+    filter(growth < -5)
+  
+  if (nrow(check) == 0) break
+}
+#define daily growth rate
+pl_gr_daily <- pl_gr_cleaned %>%
+  arrange(PID, survey_date) %>%
+  group_by(PID) %>%
+  mutate(
+    prev_height = lag(height),
+    prev_date = lag(survey_date),
+    days_elapsed = as.numeric(survey_date - prev_date),
+    daily_growth = (height - prev_height) / days_elapsed
+  ) %>%
+  ungroup()
+
+pl_lt <- pl_gr_daily %>%
+  rowwise() %>%
+  mutate(
+    mean_light_ly_day = mean(
+      ucd_daily$light[
+        !is.na(ucd_daily$date) &
+        ucd_daily$date > prev_date &
+        ucd_daily$date <= survey_date
+      ],
+      na.rm = TRUE
+    ),
+    n_days_light = sum(
+      !is.na(ucd_daily$date) &
+      ucd_daily$date > prev_date &
+      ucd_daily$date <= survey_date,
+      na.rm = TRUE
+    )
+  ) %>%
+  ungroup()
+
+#Standardization
+pl_lt$mean_light_ly_day2 <- scale(pl_lt$mean_light_ly_day, center = TRUE, scale = TRUE)
+mean_lt <- mean(pl_lt$mean_light_ly_day, na.rm = TRUE)
+sd_lt   <- sd(pl_lt$mean_light_ly_day, na.rm = TRUE)
+
+#Change Data type
+pl_lt <- pl_lt %>%
+  mutate(
+    pop = factor(pop),
+    PID        = factor(PID),
+    block      = factor(block)
+  )
+pl_lt <- pl_lt %>%
+arrange(survey_date) %>%
+mutate(
+week = as.integer((as.numeric(survey_date - min(survey_date)) %/% 7) + 1)
+)
+pl_lt$week_f <- as.factor(pl_lt$week)
+pl_lt_t.lmer <- lmer(
+daily_growth ~ mean_light_ly_day2 + (1 + mean_light_ly_day2 | pop) + (week|pop),
+data = pl_lt, REML = TRUE
+)
+summary(pl_lt_t.lmer)
+```
+
+
+```{r}
+# 1. Fixed effect slope
+b_fix <- fixef(pl_lt_t.lmer)["mean_light_ly_day2"]
+
+# 2. Random slope deviations (only from the 'pop' block)
+rand_eff <- ranef(pl_lt_t.lmer)$pop
+rand_slope <- rand_eff[, "mean_light_ly_day2"]
+
+# 3. Get variance of the random slope (from the pop block only)
+vc <- as.data.frame(VarCorr(pl_lt_t.lmer))
+
+rand_slope_var <- vc %>%
+  filter(grp == "pop", var1 == "mean_light_ly_day2", is.na(var2)) %>%
+  pull(vcov)
+
+rand_slope_sd <- sqrt(rand_slope_var)
+
+# 4. Construct slopes & CI
+pop_slopes <- tibble(
+  pop        = rownames(rand_eff),
+  slope      = b_fix + rand_slope,
+  slope_SD   = rand_slope_sd,
+  lower      = slope - 1.96 * slope_SD,
+  upper      = slope + 1.96 * slope_SD
+)
+
+pop_slopes
+
+# 5. Plot
+UCD_slope <- ggplot(pop_slopes,
+       aes(x = reorder(pop, slope), y = slope)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_pointrange(aes(ymin = lower, ymax = upper)) +
+  coord_flip() +
+  labs(title = "UCD: Population-specific slopes (95% CI)",
+       x = "Population",
+       y = "Slope (cm/day per Ly/day)") +
+  theme_bw()
+```
+
+WL2
+```{r}
+plant <- read.csv("Data/WL2-2023_Size_Combined.csv") %>%
+  clean_names() %>%
+  mutate(survey_date = as.Date(survey_date, format = "%m/%d/%Y"))
+#PID
+plant_growth <- plant %>%
+  unite("PID", genotype:rep, sep = "_", remove = FALSE) %>%
+  mutate(survey_date = as.Date(survey_date))
+#filter out plants with negative growth < -5
+plant_growth_cleaned <- plant_growth
+
+repeat {
+  plant_growth_cleaned <- plant_growth_cleaned %>%
+    arrange(PID, survey_date) %>%
+    group_by(PID) %>%
+    mutate(growth = height_cm - lag(height_cm)) %>%
+    filter(is.na(growth) | growth >= -5) %>%
+    select(-growth) %>%
+    ungroup()
+
+  check <- plant_growth_cleaned %>%
+    arrange(PID, survey_date) %>%
+    group_by(PID) %>%
+    mutate(growth = height_cm - lag(height_cm)) %>%
+    filter(growth < -5)
+  
+  if (nrow(check) == 0) break
+}
+#define daily growth rate
+plant_growth_daily <- plant_growth_cleaned %>%
+  arrange(PID, survey_date) %>%
+  group_by(PID) %>%
+  mutate(
+    prev_height = lag(height_cm),
+    prev_date = lag(survey_date),
+    days_elapsed = as.numeric(survey_date - prev_date),
+    daily_growth = (height_cm - prev_height) / days_elapsed
+  ) %>%
+  ungroup()
+#Align plant growth data to week
+plant_weekly <- plant_growth_daily %>%
+  filter(!is.na(daily_growth), days_elapsed > 0) %>%
+  mutate(week = floor_date(survey_date, "week"))
+
+#Adds `weekly_avg_SlrW` to plant data
+plant_with_light <- plant_weekly %>%
+  left_join(wl2_weekly, by = "week")
+
+#Standardization
+plant_with_light$weekly_avg_SlrW2 <- scale(plant_with_light$weekly_avg_SlrW, center = TRUE, scale = TRUE)
+mean_light <- mean(plant_with_light$weekly_avg_SlrW, na.rm = TRUE)
+sd_light   <- sd(plant_with_light$weekly_avg_SlrW, na.rm = TRUE)
+
+#Change Data type
+plant_with_light <- plant_with_light %>%
+  mutate(
+    parent_pop = factor(parent_pop),
+    PID        = factor(PID),
+    block      = factor(block)
+  )
+```
+
+```{r}
+plant_with_light <- plant_with_light %>%
+arrange(survey_date) %>%
+mutate(
+week = as.integer((as.numeric(survey_date - min(survey_date)) %/% 7) + 1)
+)
+plant_with_light$week_f <- as.factor(plant_with_light$week)
+growth_light_time.lmer <- lmer(
+daily_growth ~ weekly_avg_SlrW2 + (1 + weekly_avg_SlrW2 | parent_pop) + (week|parent_pop),
+data = plant_with_light, REML = TRUE
+)
+summary(growth_light_time.lmer)
+```
+
+```{r}
+b_fix <- fixef(growth_light_time.lmer)["weekly_avg_SlrW2"]
+
+re <- ranef(growth_light_time.lmer)$parent_pop
+rand_slope <- re[, "weekly_avg_SlrW2", drop = TRUE]
+
+vc_mat  <- VarCorr(growth_light_time.lmer)$parent_pop
+sl_col  <- which(colnames(vc_mat) == "weekly_avg_SlrW2")
+rand_slope_sd <- attr(vc_mat, "stddev")[sl_col]
+
+pop_slope <- tibble(
+  Population = rownames(re),
+  slope      = as.numeric(b_fix + rand_slope),       # cm/day per W/m^2
+  slope_SD   = rand_slope_sd,
+  lower      = slope - 1.96 * slope_SD,
+  upper      = slope + 1.96 * slope_SD
+)
+sd_light <- sd(plant_with_light[["weekly_avg_SlrW2"]], na.rm = TRUE)
+
+pop_slope_std <- pop_slope %>%
+  mutate(
+    slope_per_Wm2 = slope / sd_light,
+    lower_per_Wm2 = lower / sd_light,
+    upper_per_Wm2 = upper / sd_light
+  ) %>%
+  arrange(slope_per_Wm2)
+
+WL2_slope <- ggplot(pop_slope,
+       aes(x = slope,
+           y = reorder(Population, slope))) +
+  geom_point(size = 2) +
+  geom_errorbarh(aes(xmin = lower, xmax = upper), height = 0) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  labs(
+    title = "WL2: Population-specific slopes with 95% CI",
+    x = "Slope (cm/day per Ly/day)",
+    y = "Population"
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(size = 12)
+  )
+```
+
+```{r}
+library(patchwork)
+UCD_slope+WL2_slope
 ```
 
