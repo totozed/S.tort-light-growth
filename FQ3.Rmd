@@ -1,6 +1,8 @@
 ---
 title: "FQ3"
-output: pdf_document
+output:
+  pdf_document:
+    latex_engine: xelatex
 date: "2025-11-20"
 ---
 
@@ -30,6 +32,8 @@ load("growth_light_time.lmer.RData")
 source("manhattan_plot.R")
 #file_path <- file.choose()
 #rmarkdown::render(file_path)
+#install.packages("tinytex") 
+#tinytex::tlmgr_update()
 ```
 
 manhattan plot for 2022
